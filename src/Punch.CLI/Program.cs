@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Reflection;
 using Spectre.Console;
 using Spectre.Console.Cli;
@@ -8,14 +9,6 @@ class Program
 {
     static int Main(string[] args)
     {
-        if (args.Length == 1 && args[0] is "--version" or "-v")
-        {
-            var version = Assembly.GetExecutingAssembly()
-                .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "0.0.0";
-            Console.WriteLine(version);
-            return 0;
-        }
-
         var app = new CommandApp<PunchCommand>();
         app.Configure(config =>
         {
@@ -26,10 +19,24 @@ class Program
     }
 }
 
-internal sealed class PunchCommand : Command
+internal sealed class PunchCommandSettings : CommandSettings
 {
-    public override int Execute(CommandContext context)
+    [Description("Show version information")]
+    [CommandOption("-v|--version")]
+    public bool Version { get; set; }
+}
+
+internal sealed class PunchCommand : Command<PunchCommandSettings>
+{
+    public override int Execute(CommandContext context, PunchCommandSettings settings)
     {
+        if (settings.Version)
+        {
+            var version = Assembly.GetExecutingAssembly()
+                .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "0.0.0";
+            Console.WriteLine(version);
+            return 0;
+        }
         AnsiConsole.AlternateScreen(() =>
         {
             AnsiConsole.Cursor.Hide();

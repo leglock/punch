@@ -26,3 +26,40 @@ jobs:
       run: dotnet build --no-restore
     - name: Test
       run: dotnet test --no-build --verbosity normal
+
+  release:
+    needs: build
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+    - uses: actions/checkout@v4
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: 10.0.x
+    - name: Extract version from csproj
+      id: version
+      run: |
+        BASE_VERSION=$(grep -oP '<Version>\K[^<]+' src/Punch.CLI/Punch.CLI.csproj)
+        RELEASE_VERSION="v${BASE_VERSION}-build.${{ github.run_number }}"
+        echo "base=$BASE_VERSION" >> "$GITHUB_OUTPUT"
+        echo "tag=$RELEASE_VERSION" >> "$GITHUB_OUTPUT"
+    - name: Publish Windows binary
+      run: |
+        dotnet publish src/Punch.CLI -c Release -r win-x64 --self-contained \
+          -p:PublishSingleFile=true \
+          -p:Version=${{ steps.version.outputs.base }}-build.${{ github.run_number }}
+    - name: Zip output
+      run: |
+        cd src/Punch.CLI/bin/Release/net10.0/win-x64/publish
+        zip -j "$GITHUB_WORKSPACE/punch-win-x64.zip" punch.exe
+    - name: Create GitHub release
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        gh release create "${{ steps.version.outputs.tag }}" \
+          punch-win-x64.zip \
+          --title "${{ steps.version.outputs.tag }}" \
+          --generate-notes

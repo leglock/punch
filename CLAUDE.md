@@ -10,7 +10,7 @@ Punch is a TUI time tracker for your workday. Log, label, and export your hours 
 
 ```bash
 dotnet build                                    # Build the solution
-dotnet test                                     # Run all tests
+dotnet test                                     # Run all tests (no test project yet)
 dotnet run --project src/Punch.CLI              # Run the app
 dotnet run --project src/Punch.CLI -- --version # Show version
 ```
@@ -20,7 +20,8 @@ dotnet run --project src/Punch.CLI -- --version # Show version
 Single-project .NET 10 console app using Spectre.Console.Cli for command parsing and TUI rendering.
 
 - **`Punch.CLI`** — the main executable (assembles as `punch`). Uses `CommandApp<PunchCommand>` with a default command that renders a full-screen alternate buffer layout.
-- `--version` / `-v` is handled manually before Spectre.Console.Cli since `CommandApp<T>` with a default command doesn't support it natively.
+- All types currently live in `Program.cs`: `Program`, `PunchCommandSettings`, and `PunchCommand`.
+- `--version` / `-v` is a `PunchCommandSettings` option handled in `PunchCommand.Execute` (reads `AssemblyInformationalVersionAttribute`).
 
 ## Conventions
 

@@ -58,12 +58,30 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                 UpdateLayout(layout, messages, inputBuffer);
                 ctx.Refresh();
 
+                var confirming = false;
+
                 while (true)
                 {
                     var key = System.Console.ReadKey(true);
 
-                    if (key.Key == ConsoleKey.Escape)
-                        break;
+                    if (confirming)
+                    {
+                        if (key.KeyChar is 'y' or 'Y')
+                            break;
+
+                        confirming = false;
+                        UpdateLayout(layout, messages, inputBuffer);
+                        ctx.Refresh();
+                        continue;
+                    }
+
+                    if (key.Key == ConsoleKey.Q && key.Modifiers.HasFlag(ConsoleModifiers.Control))
+                    {
+                        confirming = true;
+                        UpdateLayout(layout, messages, inputBuffer, confirming: true);
+                        ctx.Refresh();
+                        continue;
+                    }
 
                     if (key.Key == ConsoleKey.Enter)
                     {
@@ -82,9 +100,6 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                     }
                     else if (key.KeyChar != '\0' && !char.IsControl(key.KeyChar))
                     {
-                        if (inputBuffer.Length == 0 && key.KeyChar is 'q' or 'Q')
-                            break;
-
                         inputBuffer.Append(key.KeyChar);
                     }
 
@@ -97,7 +112,7 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
         return 0;
     }
 
-    private static void UpdateLayout(Layout layout, List<string> messages, StringBuilder inputBuffer)
+    private static void UpdateLayout(Layout layout, List<string> messages, StringBuilder inputBuffer, bool confirming = false)
     {
         // Messages pane: show recent messages that fit
         var consoleHeight = System.Console.WindowHeight;
@@ -124,14 +139,24 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                 .Border(BoxBorder.Rounded));
 
         // Input pane
-        var inputText = Markup.Escape(inputBuffer.ToString());
-        layout["Input"].Update(
-            new Panel(new Markup($"> {inputText}[blink]_[/]"))
-                .Expand()
-                .Border(BoxBorder.Rounded));
+        if (confirming)
+        {
+            layout["Input"].Update(
+                new Panel(new Markup("[bold yellow]Are you sure you want to quit? [/][dim](y/n)[/]"))
+                    .Expand()
+                    .Border(BoxBorder.Rounded));
+        }
+        else
+        {
+            var inputText = Markup.Escape(inputBuffer.ToString());
+            layout["Input"].Update(
+                new Panel(new Markup($"> {inputText}[blink]_[/]"))
+                    .Expand()
+                    .Border(BoxBorder.Rounded));
+        }
 
         // Footer
         layout["Footer"].Update(
-            new Markup("[dim]Press [bold]Enter[/] to send | [bold]Escape[/] to quit | [bold]q[/] (empty input) to quit[/]"));
+            new Markup("[dim]Press [bold]Enter[/] to send | [bold]Ctrl+Q[/] to quit[/]"));
     }
 }

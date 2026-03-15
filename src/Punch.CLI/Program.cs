@@ -362,7 +362,7 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
 
         layout["Timeline"].Update(
             new Panel(timelineContent)
-                .Header("[bold]Timeline[/]")
+                .Header("[bold][red]p[/][orangered1]u[/][darkorange]n[/][orange3]c[/][orange1]h[/][/]", Justify.Center)
                 .Expand()
                 .Border(BoxBorder.Rounded));
 
@@ -404,7 +404,7 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
 
         layout["Messages"].Update(
             new Panel(messagesContent)
-                .Header("[bold][red]p[/][orangered1]u[/][darkorange]n[/][orange3]c[/][orange1]h[/][/]")
+                .Header("Time Logged")
                 .Expand()
                 .Border(BoxBorder.Rounded));
 
@@ -458,6 +458,6 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
         var statusRight = $"{totalFormatted}    {percent}% of 8h  ";
         var padding = Math.Max(0, consoleWidth - statusLeft.Length - statusRight.Length);
         var statusPadded = statusLeft + new string(' ', padding) + statusRight;
-        layout["StatusBar"].Update(new Markup($"[white on blue]{Markup.Escape(statusPadded)}[/]"));
+        layout["StatusBar"].Update(new Markup($"[white on orangered1]{Markup.Escape(statusPadded)}[/]"));
     }
 }

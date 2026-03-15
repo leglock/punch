@@ -43,7 +43,7 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
         }
 
         var inputBuffer = new StringBuilder();
-        var cursorSlot = 0; // 0–95: 96 quarter-hour slots (00:00–23:45)
+        var cursorSlot = 34; // 0–95: 96 quarter-hour slots (00:00–23:45); default to 8:30am
         var selectionLength = 1; // number of 15-min slots selected (min 1)
         var bookedBlocks = new List<TimeBlock>();
         var occupied = new bool[96];

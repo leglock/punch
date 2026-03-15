@@ -47,6 +47,8 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
         var selectionLength = 1; // number of 15-min slots selected (min 1)
         var bookedBlocks = new List<TimeBlock>();
         var occupied = new bool[96];
+        TimeBlock? selectedBlock = null;
+        var editing = false;
 
         AnsiConsole.AlternateScreen(() =>
         {
@@ -61,7 +63,7 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
 
             AnsiConsole.Live(layout).Start(ctx =>
             {
-                UpdateLayout(layout, bookedBlocks, inputBuffer, cursorSlot: cursorSlot, selectionLength: selectionLength, occupied: occupied);
+                UpdateLayout(layout, bookedBlocks, inputBuffer, cursorSlot: cursorSlot, selectionLength: selectionLength, occupied: occupied, selectedBlock: selectedBlock, editing: editing);
                 ctx.Refresh();
 
                 var confirming = false;
@@ -76,7 +78,7 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                             break;
 
                         confirming = false;
-                        UpdateLayout(layout, bookedBlocks, inputBuffer, cursorSlot: cursorSlot, selectionLength: selectionLength, occupied: occupied);
+                        UpdateLayout(layout, bookedBlocks, inputBuffer, cursorSlot: cursorSlot, selectionLength: selectionLength, occupied: occupied, selectedBlock: selectedBlock, editing: editing);
                         ctx.Refresh();
                         continue;
                     }
@@ -84,41 +86,97 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                     if (key.Key == ConsoleKey.Q && key.Modifiers.HasFlag(ConsoleModifiers.Control))
                     {
                         confirming = true;
-                        UpdateLayout(layout, bookedBlocks, inputBuffer, confirming: true, cursorSlot: cursorSlot, selectionLength: selectionLength, occupied: occupied);
+                        UpdateLayout(layout, bookedBlocks, inputBuffer, confirming: true, cursorSlot: cursorSlot, selectionLength: selectionLength, occupied: occupied, selectedBlock: selectedBlock, editing: editing);
                         ctx.Refresh();
                         continue;
                     }
 
                     if (key.Key == ConsoleKey.LeftArrow)
                     {
-                        var next = cursorSlot - 1;
-                        while (next >= 0 && IsOverlapping(next, selectionLength, occupied))
-                            next--;
-                        if (next >= 0)
-                            cursorSlot = next;
+                        if (cursorSlot > 0)
+                        {
+                            cursorSlot--;
+                            selectionLength = 1;
+                            selectedBlock = FindBlockAt(cursorSlot, bookedBlocks);
+                            if (selectedBlock != null)
+                            {
+                                cursorSlot = selectedBlock.StartSlot;
+                                selectionLength = selectedBlock.Length;
+                            }
+                            editing = false;
+                            inputBuffer.Clear();
+                        }
                     }
                     else if (key.Key == ConsoleKey.RightArrow)
                     {
-                        var next = cursorSlot + 1;
-                        while (next + selectionLength <= 96 && IsOverlapping(next, selectionLength, occupied))
-                            next++;
-                        if (next + selectionLength <= 96)
-                            cursorSlot = next;
+                        if (cursorSlot + selectionLength < 96)
+                        {
+                            cursorSlot = cursorSlot + selectionLength;
+                            selectionLength = 1;
+                            selectedBlock = FindBlockAt(cursorSlot, bookedBlocks);
+                            if (selectedBlock != null)
+                            {
+                                cursorSlot = selectedBlock.StartSlot;
+                                selectionLength = selectedBlock.Length;
+                            }
+                            editing = false;
+                            inputBuffer.Clear();
+                        }
                     }
                     else if (key.Key == ConsoleKey.UpArrow)
                     {
-                        var newLen = selectionLength + 1;
-                        if (cursorSlot + newLen <= 96 && !IsOverlapping(cursorSlot, newLen, occupied))
-                            selectionLength = newLen;
+                        if (selectedBlock == null)
+                        {
+                            var newLen = selectionLength + 1;
+                            if (cursorSlot + newLen <= 96 && !IsOverlapping(cursorSlot, newLen, occupied))
+                                selectionLength = newLen;
+                        }
                     }
                     else if (key.Key == ConsoleKey.DownArrow)
                     {
-                        if (selectionLength > 1)
+                        if (selectedBlock == null && selectionLength > 1)
                             selectionLength--;
+                    }
+                    else if (key.Key == ConsoleKey.D && key.Modifiers.HasFlag(ConsoleModifiers.Control))
+                    {
+                        // Ctrl+D: delete selected block
+                        if (selectedBlock != null)
+                        {
+                            for (var s = selectedBlock.StartSlot; s < selectedBlock.StartSlot + selectedBlock.Length; s++)
+                                occupied[s] = false;
+                            bookedBlocks.Remove(selectedBlock);
+                            selectedBlock = null;
+                            selectionLength = 1;
+                            editing = false;
+                            inputBuffer.Clear();
+                        }
+                    }
+                    else if (key.Key == ConsoleKey.E && key.Modifiers.HasFlag(ConsoleModifiers.Control))
+                    {
+                        // Ctrl+E: edit selected block's label
+                        if (selectedBlock != null && !editing)
+                        {
+                            editing = true;
+                            inputBuffer.Clear();
+                            inputBuffer.Append(selectedBlock.Label);
+                        }
                     }
                     else if (key.Key == ConsoleKey.Enter)
                     {
-                        if (inputBuffer.Length > 0)
+                        if (editing && selectedBlock != null)
+                        {
+                            // Save edited label
+                            var newLabel = inputBuffer.ToString();
+                            var idx = bookedBlocks.IndexOf(selectedBlock);
+                            if (idx >= 0)
+                            {
+                                selectedBlock = selectedBlock with { Label = newLabel };
+                                bookedBlocks[idx] = selectedBlock;
+                            }
+                            editing = false;
+                            inputBuffer.Clear();
+                        }
+                        else if (selectedBlock == null && inputBuffer.Length > 0)
                         {
                             var label = inputBuffer.ToString();
                             var block = new TimeBlock(cursorSlot, selectionLength, label);
@@ -138,21 +196,27 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                     }
                     else if (key.Key == ConsoleKey.Backspace)
                     {
-                        if (inputBuffer.Length > 0)
+                        if ((selectedBlock == null || editing) && inputBuffer.Length > 0)
                             inputBuffer.Remove(inputBuffer.Length - 1, 1);
                     }
                     else if (key.KeyChar != '\0' && !char.IsControl(key.KeyChar))
                     {
-                        inputBuffer.Append(key.KeyChar);
+                        if (selectedBlock == null || editing)
+                            inputBuffer.Append(key.KeyChar);
                     }
 
-                    UpdateLayout(layout, bookedBlocks, inputBuffer, cursorSlot: cursorSlot, selectionLength: selectionLength, occupied: occupied);
+                    UpdateLayout(layout, bookedBlocks, inputBuffer, cursorSlot: cursorSlot, selectionLength: selectionLength, occupied: occupied, selectedBlock: selectedBlock, editing: editing);
                     ctx.Refresh();
                 }
             });
         });
 
         return 0;
+    }
+
+    private static TimeBlock? FindBlockAt(int slot, List<TimeBlock> blocks)
+    {
+        return blocks.FirstOrDefault(b => slot >= b.StartSlot && slot < b.StartSlot + b.Length);
     }
 
     private static bool IsOverlapping(int start, int length, bool[] occupied)
@@ -163,7 +227,7 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
         return false;
     }
 
-    private static void UpdateLayout(Layout layout, List<TimeBlock> bookedBlocks, StringBuilder inputBuffer, bool confirming = false, int cursorSlot = 0, int selectionLength = 1, bool[]? occupied = null)
+    private static void UpdateLayout(Layout layout, List<TimeBlock> bookedBlocks, StringBuilder inputBuffer, bool confirming = false, int cursorSlot = 0, int selectionLength = 1, bool[]? occupied = null, TimeBlock? selectedBlock = null, bool editing = false)
     {
         // Timeline pane
         var consoleWidth = System.Console.WindowWidth;
@@ -177,25 +241,27 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
 
         // Build the bar line: mark booked slots, then overlay selection
         // Each pixel maps to a slot range; tag pixels as: 'free', 'booked', 'selected'
-        var pixelState = new int[barWidth]; // 0=free, 1=booked, 2=selected
-        var occ = occupied ?? new bool[96];
-        for (var px = 0; px < barWidth; px++)
+        var pixelState = new int[barWidth]; // 0=free, 1=booked, 2=selected, 3=selected-existing
+        foreach (var block in bookedBlocks)
         {
-            var slotStart = (int)((double)px / barWidth * 96);
-            var slotEnd = (int)((double)(px + 1) / barWidth * 96);
-            if (slotEnd <= slotStart) slotEnd = slotStart + 1;
-            for (var s = slotStart; s < slotEnd && s < 96; s++)
-            {
-                if (occ[s]) { pixelState[px] = 1; break; }
-            }
+            var bStart = (int)((double)block.StartSlot / 96 * barWidth);
+            var bEndExcl = (int)((double)(block.StartSlot + block.Length) / 96 * barWidth);
+            bStart = Math.Clamp(bStart, 0, barWidth);
+            bEndExcl = Math.Clamp(bEndExcl, bStart, barWidth);
+            if (bEndExcl == bStart) bEndExcl = bStart + 1; // at least 1 pixel
+            for (var px = bStart; px < bEndExcl && px < barWidth; px++)
+                pixelState[px] = 1;
         }
 
         var selStartPos = (int)((double)cursorSlot / 96 * barWidth);
-        var selEndPos = (int)((double)endSlot / 96 * barWidth) - 1;
+        var selEndExcl = (int)((double)endSlot / 96 * barWidth);
+        if (selEndExcl == selStartPos) selEndExcl = selStartPos + 1;
         selStartPos = Math.Clamp(selStartPos, 0, barWidth - 1);
-        selEndPos = Math.Clamp(selEndPos, selStartPos, barWidth - 1);
+        var selEndPos = Math.Clamp(selEndExcl - 1, selStartPos, barWidth - 1);
+        // State 3 = selected existing block (cyan), State 2 = free selection (yellow)
+        var selPixelState = selectedBlock != null ? 3 : 2;
         for (var i = selStartPos; i <= selEndPos; i++)
-            pixelState[i] = 2;
+            pixelState[i] = selPixelState;
 
         // Build hour labels line
         var labelChars = new char[barWidth];
@@ -228,6 +294,7 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                 {
                     1 => "[green]",
                     2 => "[bold yellow]",
+                    3 => "[bold cyan]",
                     _ => "[dim]"
                 });
             }
@@ -269,7 +336,9 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                 var eh = es / 4;
                 var em = (es % 4) * 15;
                 var escaped = Markup.Escape(b.Label);
-                return (IRenderable)new Markup($"[green]\u25a0[/] [bold]{sh:D2}:{sm:D2}\u2013{eh:D2}:{em:D2}[/] {escaped}");
+                var isSelected = selectedBlock != null && b.StartSlot == selectedBlock.StartSlot && b.Length == selectedBlock.Length;
+                var squareColor = isSelected ? "cyan" : "green";
+                return (IRenderable)new Markup($"[{squareColor}]\u25a0[/] [bold]{sh:D2}:{sm:D2}\u2013{eh:D2}:{em:D2}[/] {escaped}");
             }).ToArray();
             messagesContent = new Rows(renderables);
         }
@@ -288,6 +357,22 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                     .Expand()
                     .Border(BoxBorder.Rounded));
         }
+        else if (selectedBlock != null && editing)
+        {
+            var inputText = Markup.Escape(inputBuffer.ToString());
+            layout["Input"].Update(
+                new Panel(new Markup($"[cyan]editing:[/] > {inputText}[blink]_[/]"))
+                    .Expand()
+                    .Border(BoxBorder.Rounded));
+        }
+        else if (selectedBlock != null)
+        {
+            var labelText = Markup.Escape(selectedBlock.Label);
+            layout["Input"].Update(
+                new Panel(new Markup($"[dim]selected:[/] {labelText}"))
+                    .Expand()
+                    .Border(BoxBorder.Rounded));
+        }
         else
         {
             var inputText = Markup.Escape(inputBuffer.ToString());
@@ -298,7 +383,9 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
         }
 
         // Footer
-        layout["Footer"].Update(
-            new Markup("[dim]Press [bold]← →[/] move | [bold]↑ ↓[/] resize | [bold]Enter[/] send | [bold]Ctrl+Q[/] quit[/]"));
+        var footerText = selectedBlock != null
+            ? "[dim]Press [bold]← →[/] move | [bold]Ctrl+D[/] delete | [bold]Ctrl+E[/] edit | [bold]Ctrl+Q[/] quit[/]"
+            : "[dim]Press [bold]← →[/] move | [bold]↑ ↓[/] resize | [bold]Enter[/] send | [bold]Ctrl+Q[/] quit[/]";
+        layout["Footer"].Update(new Markup(footerText));
     }
 }

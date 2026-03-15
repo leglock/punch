@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Reflection;
 using System.Text;
+using System.Text.Json;
 using Spectre.Console;
 using Spectre.Console.Cli;
 using Spectre.Console.Rendering;
@@ -26,9 +27,104 @@ internal sealed class PunchCommandSettings : CommandSettings
     [Description("Show version information")]
     [CommandOption("-v|--version")]
     public bool Version { get; set; }
+
+    [Description("Working date override (format: yyyy-MM-dd)")]
+    [CommandOption("-d|--date")]
+    public string? Date { get; set; }
 }
 
 internal sealed record TimeBlock(int StartSlot, int Length, string Label);
+
+internal sealed class PunchData
+{
+    public List<TimeBlockDto> Blocks { get; set; } = new();
+}
+
+internal sealed class TimeBlockDto
+{
+    public int StartSlot { get; set; }
+    public int Length { get; set; }
+    public string Label { get; set; } = "";
+}
+
+internal static class PunchStorage
+{
+    public static string GetDataDirectory()
+    {
+        return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".punch", "data");
+    }
+
+    public static string GetFilePath(DateOnly date)
+    {
+        return Path.Combine(GetDataDirectory(), $"{date:yyyy-MM-dd}.json");
+    }
+
+    public static string GetDisplayPath(DateOnly date)
+    {
+        var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        var full = GetFilePath(date);
+        return full.StartsWith(home) ? "~" + full[home.Length..] : full;
+    }
+
+    public static List<TimeBlock> Load(DateOnly date)
+    {
+        var path = GetFilePath(date);
+        if (!File.Exists(path))
+            return new List<TimeBlock>();
+
+        try
+        {
+            var json = File.ReadAllText(path);
+            var data = JsonSerializer.Deserialize<PunchData>(json);
+            if (data?.Blocks == null)
+                return new List<TimeBlock>();
+
+            var result = new List<TimeBlock>();
+            var occupied = new bool[96];
+            foreach (var dto in data.Blocks)
+            {
+                if (dto.StartSlot < 0 || dto.StartSlot >= 96 || dto.Length < 1 || dto.StartSlot + dto.Length > 96)
+                    continue;
+
+                var overlaps = false;
+                for (var s = dto.StartSlot; s < dto.StartSlot + dto.Length; s++)
+                {
+                    if (occupied[s]) { overlaps = true; break; }
+                }
+                if (overlaps) continue;
+
+                for (var s = dto.StartSlot; s < dto.StartSlot + dto.Length; s++)
+                    occupied[s] = true;
+
+                result.Add(new TimeBlock(dto.StartSlot, dto.Length, dto.Label));
+            }
+            return result;
+        }
+        catch
+        {
+            return new List<TimeBlock>();
+        }
+    }
+
+    public static void Save(DateOnly date, List<TimeBlock> blocks)
+    {
+        var dir = GetDataDirectory();
+        Directory.CreateDirectory(dir);
+
+        var data = new PunchData
+        {
+            Blocks = blocks.Select(b => new TimeBlockDto
+            {
+                StartSlot = b.StartSlot,
+                Length = b.Length,
+                Label = b.Label
+            }).ToList()
+        };
+
+        var json = JsonSerializer.Serialize(data, new JsonSerializerOptions { WriteIndented = true });
+        File.WriteAllText(GetFilePath(date), json);
+    }
+}
 
 internal sealed class PunchCommand : Command<PunchCommandSettings>
 {
@@ -42,11 +138,36 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
             return 0;
         }
 
+        DateOnly workingDate;
+        if (settings.Date != null)
+        {
+            if (!DateOnly.TryParseExact(settings.Date, "yyyy-MM-dd", out workingDate))
+            {
+                Console.Error.WriteLine($"Invalid date format: '{settings.Date}'. Expected yyyy-MM-dd.");
+                return 1;
+            }
+        }
+        else
+        {
+            workingDate = DateOnly.FromDateTime(DateTime.Now);
+        }
+
+        var filePath = PunchStorage.GetDisplayPath(workingDate);
         var inputBuffer = new StringBuilder();
-        var cursorSlot = 34; // 0–95: 96 quarter-hour slots (00:00–23:45); default to 8:30am
         var selectionLength = 1; // number of 15-min slots selected (min 1)
-        var bookedBlocks = new List<TimeBlock>();
+        var bookedBlocks = PunchStorage.Load(workingDate);
         var occupied = new bool[96];
+        foreach (var block in bookedBlocks)
+            for (var s = block.StartSlot; s < block.StartSlot + block.Length; s++)
+                occupied[s] = true;
+
+        var cursorSlot = 34; // default to 8:30am
+        if (bookedBlocks.Count > 0)
+        {
+            var lastEnd = bookedBlocks.Max(b => b.StartSlot + b.Length);
+            if (lastEnd < 96)
+                cursorSlot = lastEnd;
+        }
         TimeBlock? selectedBlock = null;
         var editing = false;
         var showHelp = false;
@@ -64,7 +185,7 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
 
             AnsiConsole.Live(layout).Start(ctx =>
             {
-                UpdateLayout(layout, bookedBlocks, inputBuffer, cursorSlot: cursorSlot, selectionLength: selectionLength, occupied: occupied, selectedBlock: selectedBlock, editing: editing, showHelp: showHelp);
+                UpdateLayout(layout, bookedBlocks, inputBuffer, filePath, cursorSlot: cursorSlot, selectionLength: selectionLength, occupied: occupied, selectedBlock: selectedBlock, editing: editing, showHelp: showHelp);
                 ctx.Refresh();
 
                 var confirming = false;
@@ -79,7 +200,7 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                             break;
 
                         confirming = false;
-                        UpdateLayout(layout, bookedBlocks, inputBuffer, cursorSlot: cursorSlot, selectionLength: selectionLength, occupied: occupied, selectedBlock: selectedBlock, editing: editing, showHelp: showHelp);
+                        UpdateLayout(layout, bookedBlocks, inputBuffer, filePath, cursorSlot: cursorSlot, selectionLength: selectionLength, occupied: occupied, selectedBlock: selectedBlock, editing: editing, showHelp: showHelp);
                         ctx.Refresh();
                         continue;
                     }
@@ -87,7 +208,7 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                     if (key.Key == ConsoleKey.Q && key.Modifiers.HasFlag(ConsoleModifiers.Control))
                     {
                         confirming = true;
-                        UpdateLayout(layout, bookedBlocks, inputBuffer, confirming: true, cursorSlot: cursorSlot, selectionLength: selectionLength, occupied: occupied, selectedBlock: selectedBlock, editing: editing, showHelp: showHelp);
+                        UpdateLayout(layout, bookedBlocks, inputBuffer, filePath, confirming: true, cursorSlot: cursorSlot, selectionLength: selectionLength, occupied: occupied, selectedBlock: selectedBlock, editing: editing, showHelp: showHelp);
                         ctx.Refresh();
                         continue;
                     }
@@ -95,7 +216,7 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                     if (showHelp)
                     {
                         showHelp = false;
-                        UpdateLayout(layout, bookedBlocks, inputBuffer, cursorSlot: cursorSlot, selectionLength: selectionLength, occupied: occupied, selectedBlock: selectedBlock, editing: editing, showHelp: showHelp);
+                        UpdateLayout(layout, bookedBlocks, inputBuffer, filePath, cursorSlot: cursorSlot, selectionLength: selectionLength, occupied: occupied, selectedBlock: selectedBlock, editing: editing, showHelp: showHelp);
                         ctx.Refresh();
                         continue;
                     }
@@ -103,7 +224,7 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                     if (key.KeyChar == '?' && selectedBlock == null && !editing && inputBuffer.Length == 0)
                     {
                         showHelp = !showHelp;
-                        UpdateLayout(layout, bookedBlocks, inputBuffer, cursorSlot: cursorSlot, selectionLength: selectionLength, occupied: occupied, selectedBlock: selectedBlock, editing: editing, showHelp: showHelp);
+                        UpdateLayout(layout, bookedBlocks, inputBuffer, filePath, cursorSlot: cursorSlot, selectionLength: selectionLength, occupied: occupied, selectedBlock: selectedBlock, editing: editing, showHelp: showHelp);
                         ctx.Refresh();
                         continue;
                     }
@@ -214,6 +335,7 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                             for (var s = selectedBlock.StartSlot; s < selectedBlock.StartSlot + selectedBlock.Length; s++)
                                 occupied[s] = false;
                             bookedBlocks.Remove(selectedBlock);
+                            PunchStorage.Save(workingDate, bookedBlocks);
                             selectedBlock = null;
                             selectionLength = 1;
                             editing = false;
@@ -241,6 +363,7 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                             {
                                 selectedBlock = selectedBlock with { Label = newLabel };
                                 bookedBlocks[idx] = selectedBlock;
+                                PunchStorage.Save(workingDate, bookedBlocks);
                             }
                             editing = false;
                             inputBuffer.Clear();
@@ -252,6 +375,7 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                             bookedBlocks.Add(block);
                             for (var s = block.StartSlot; s < block.StartSlot + block.Length; s++)
                                 occupied[s] = true;
+                            PunchStorage.Save(workingDate, bookedBlocks);
 
                             inputBuffer.Clear();
 
@@ -274,7 +398,7 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                             inputBuffer.Append(key.KeyChar);
                     }
 
-                    UpdateLayout(layout, bookedBlocks, inputBuffer, cursorSlot: cursorSlot, selectionLength: selectionLength, occupied: occupied, selectedBlock: selectedBlock, editing: editing, showHelp: showHelp);
+                    UpdateLayout(layout, bookedBlocks, inputBuffer, filePath, cursorSlot: cursorSlot, selectionLength: selectionLength, occupied: occupied, selectedBlock: selectedBlock, editing: editing, showHelp: showHelp);
                     ctx.Refresh();
                 }
             });
@@ -296,7 +420,7 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
         return false;
     }
 
-    private static void UpdateLayout(Layout layout, List<TimeBlock> bookedBlocks, StringBuilder inputBuffer, bool confirming = false, int cursorSlot = 0, int selectionLength = 1, bool[]? occupied = null, TimeBlock? selectedBlock = null, bool editing = false, bool showHelp = false)
+    private static void UpdateLayout(Layout layout, List<TimeBlock> bookedBlocks, StringBuilder inputBuffer, string filePath, bool confirming = false, int cursorSlot = 0, int selectionLength = 1, bool[]? occupied = null, TimeBlock? selectedBlock = null, bool editing = false, bool showHelp = false)
     {
         // Timeline pane
         var consoleWidth = System.Console.WindowWidth;
@@ -484,11 +608,10 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
         var totalMins = totalMinutesAll % 60;
         var totalFormatted = totalMins > 0 ? $"{totalHours}h {totalMins}m" : $"{totalHours}h 0m";
         var percent = totalMinutesAll * 100 / 480;
-        var dateStr = DateTime.Now.ToString("yyyy-MM-dd");
-        var statusLeftPlain = $"  {dateStr}  ?=help";
+        var statusLeftPlain = $"  {filePath}  ?=help";
         var statusRight = $"{totalFormatted}    {percent}% of 8h  ";
         var padding = Math.Max(0, consoleWidth - statusLeftPlain.Length - statusRight.Length);
-        var statusBar = $"[white on orangered1]  {dateStr}  [dim]?=help[/]{new string(' ', padding)}{Markup.Escape(statusRight)}[/]";
+        var statusBar = $"[white on orangered1]  {Markup.Escape(filePath)}  [dim]?=help[/]{new string(' ', padding)}{Markup.Escape(statusRight)}[/]";
         layout["StatusBar"].Update(new Markup(statusBar));
     }
 }

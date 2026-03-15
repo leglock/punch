@@ -49,6 +49,7 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
         var occupied = new bool[96];
         TimeBlock? selectedBlock = null;
         var editing = false;
+        var showHelp = false;
 
         AnsiConsole.AlternateScreen(() =>
         {
@@ -59,12 +60,11 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                     new Layout("Timeline").Size(5),
                     new Layout("Messages").Ratio(4),
                     new Layout("Input").Ratio(1),
-                    new Layout("Footer").Size(1),
                     new Layout("StatusBar").Size(1));
 
             AnsiConsole.Live(layout).Start(ctx =>
             {
-                UpdateLayout(layout, bookedBlocks, inputBuffer, cursorSlot: cursorSlot, selectionLength: selectionLength, occupied: occupied, selectedBlock: selectedBlock, editing: editing);
+                UpdateLayout(layout, bookedBlocks, inputBuffer, cursorSlot: cursorSlot, selectionLength: selectionLength, occupied: occupied, selectedBlock: selectedBlock, editing: editing, showHelp: showHelp);
                 ctx.Refresh();
 
                 var confirming = false;
@@ -79,7 +79,7 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                             break;
 
                         confirming = false;
-                        UpdateLayout(layout, bookedBlocks, inputBuffer, cursorSlot: cursorSlot, selectionLength: selectionLength, occupied: occupied, selectedBlock: selectedBlock, editing: editing);
+                        UpdateLayout(layout, bookedBlocks, inputBuffer, cursorSlot: cursorSlot, selectionLength: selectionLength, occupied: occupied, selectedBlock: selectedBlock, editing: editing, showHelp: showHelp);
                         ctx.Refresh();
                         continue;
                     }
@@ -87,7 +87,23 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                     if (key.Key == ConsoleKey.Q && key.Modifiers.HasFlag(ConsoleModifiers.Control))
                     {
                         confirming = true;
-                        UpdateLayout(layout, bookedBlocks, inputBuffer, confirming: true, cursorSlot: cursorSlot, selectionLength: selectionLength, occupied: occupied, selectedBlock: selectedBlock, editing: editing);
+                        UpdateLayout(layout, bookedBlocks, inputBuffer, confirming: true, cursorSlot: cursorSlot, selectionLength: selectionLength, occupied: occupied, selectedBlock: selectedBlock, editing: editing, showHelp: showHelp);
+                        ctx.Refresh();
+                        continue;
+                    }
+
+                    if (showHelp)
+                    {
+                        showHelp = false;
+                        UpdateLayout(layout, bookedBlocks, inputBuffer, cursorSlot: cursorSlot, selectionLength: selectionLength, occupied: occupied, selectedBlock: selectedBlock, editing: editing, showHelp: showHelp);
+                        ctx.Refresh();
+                        continue;
+                    }
+
+                    if (key.KeyChar == '?' && selectedBlock == null && !editing && inputBuffer.Length == 0)
+                    {
+                        showHelp = !showHelp;
+                        UpdateLayout(layout, bookedBlocks, inputBuffer, cursorSlot: cursorSlot, selectionLength: selectionLength, occupied: occupied, selectedBlock: selectedBlock, editing: editing, showHelp: showHelp);
                         ctx.Refresh();
                         continue;
                     }
@@ -258,7 +274,7 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                             inputBuffer.Append(key.KeyChar);
                     }
 
-                    UpdateLayout(layout, bookedBlocks, inputBuffer, cursorSlot: cursorSlot, selectionLength: selectionLength, occupied: occupied, selectedBlock: selectedBlock, editing: editing);
+                    UpdateLayout(layout, bookedBlocks, inputBuffer, cursorSlot: cursorSlot, selectionLength: selectionLength, occupied: occupied, selectedBlock: selectedBlock, editing: editing, showHelp: showHelp);
                     ctx.Refresh();
                 }
             });
@@ -280,7 +296,7 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
         return false;
     }
 
-    private static void UpdateLayout(Layout layout, List<TimeBlock> bookedBlocks, StringBuilder inputBuffer, bool confirming = false, int cursorSlot = 0, int selectionLength = 1, bool[]? occupied = null, TimeBlock? selectedBlock = null, bool editing = false)
+    private static void UpdateLayout(Layout layout, List<TimeBlock> bookedBlocks, StringBuilder inputBuffer, bool confirming = false, int cursorSlot = 0, int selectionLength = 1, bool[]? occupied = null, TimeBlock? selectedBlock = null, bool editing = false, bool showHelp = false)
     {
         // Timeline pane
         var consoleWidth = System.Console.WindowWidth;
@@ -402,11 +418,33 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
             messagesContent = new Rows(renderables);
         }
 
-        layout["Messages"].Update(
-            new Panel(messagesContent)
-                .Header("Time Logged")
-                .Expand()
-                .Border(BoxBorder.Rounded));
+        if (showHelp)
+        {
+            var helpText = new Markup(
+                "[bold]← →[/]        Move cursor / Jump between blocks\n" +
+                "[bold]↑ ↓[/]        Resize selection\n" +
+                "[bold]Enter[/]      Log time entry\n" +
+                "[bold]Ctrl+E[/]     Edit selected entry\n" +
+                "[bold]Ctrl+D[/]     Delete selected entry\n" +
+                "[bold]Ctrl+Q[/]     Quit\n" +
+                "[bold]?[/]          Toggle this help");
+            var helpPanel = new Panel(helpText)
+                .Header("Keyboard Shortcuts")
+                .Border(BoxBorder.Rounded)
+                .Expand();
+            layout["Messages"].Update(
+                new Panel(Align.Center(helpPanel, VerticalAlignment.Middle))
+                    .Expand()
+                    .NoBorder());
+        }
+        else
+        {
+            layout["Messages"].Update(
+                new Panel(messagesContent)
+                    .Header("Time Logged")
+                    .Expand()
+                    .Border(BoxBorder.Rounded));
+        }
 
         // Input pane
         if (confirming)
@@ -441,12 +479,6 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                     .Border(BoxBorder.Rounded));
         }
 
-        // Footer
-        var footerText = selectedBlock != null
-            ? "[dim]Press [bold]← →[/] move | [bold]Ctrl+D[/] delete | [bold]Ctrl+E[/] edit | [bold]Ctrl+Q[/] quit[/]"
-            : "[dim]Press [bold]← →[/] move | [bold]↑ ↓[/] resize | [bold]Enter[/] send | [bold]Ctrl+Q[/] quit[/]";
-        layout["Footer"].Update(new Markup(footerText));
-
         // Status bar
         var totalMinutesAll = bookedBlocks.Sum(b => b.Length * 15);
         var totalHours = totalMinutesAll / 60;
@@ -454,10 +486,10 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
         var totalFormatted = totalMins > 0 ? $"{totalHours}h {totalMins}m" : $"{totalHours}h 0m";
         var percent = totalMinutesAll * 100 / 480;
         var dateStr = DateTime.Now.ToString("yyyy-MM-dd");
-        var statusLeft = $"  {dateStr}";
+        var statusLeftPlain = $"  {dateStr}  ?=help";
         var statusRight = $"{totalFormatted}    {percent}% of 8h  ";
-        var padding = Math.Max(0, consoleWidth - statusLeft.Length - statusRight.Length);
-        var statusPadded = statusLeft + new string(' ', padding) + statusRight;
-        layout["StatusBar"].Update(new Markup($"[white on orangered1]{Markup.Escape(statusPadded)}[/]"));
+        var padding = Math.Max(0, consoleWidth - statusLeftPlain.Length - statusRight.Length);
+        var statusBar = $"[white on orangered1]  {dateStr}  [dim]?=help[/]{new string(' ', padding)}{Markup.Escape(statusRight)}[/]";
+        layout["StatusBar"].Update(new Markup(statusBar));
     }
 }

@@ -390,7 +390,13 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                 var escaped = Markup.Escape(b.Label);
                 var isSelected = selectedBlock != null && b.StartSlot == selectedBlock.StartSlot && b.Length == selectedBlock.Length;
                 var squareColor = isSelected ? "cyan" : "green";
-                return (IRenderable)new Markup($"[{squareColor}]\u25a0[/] [bold]{sh:D2}:{sm:D2}\u2013{eh:D2}:{em:D2}[/] {escaped}");
+                var totalMinutes = b.Length * 15;
+                var durationText = totalMinutes >= 60
+                    ? totalMinutes % 60 == 0
+                        ? $"{totalMinutes / 60}h"
+                        : $"{totalMinutes / 60}h {totalMinutes % 60}m"
+                    : $"{totalMinutes}m";
+                return (IRenderable)new Markup($"[{squareColor}]\u25a0[/] [bold]{sh:D2}:{sm:D2}\u2013{eh:D2}:{em:D2}[/] {escaped} [dim grey]{durationText}[/]");
             }).ToArray();
             messagesContent = new Rows(renderables);
         }

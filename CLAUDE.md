@@ -17,11 +17,13 @@ dotnet run --project src/Punch.CLI -- --version # Show version
 
 ## Architecture
 
-Single-project .NET 10 console app using Spectre.Console.Cli for command parsing and TUI rendering.
+Single-project .NET 10 console app using Spectre.Console.Cli for command parsing and TUI rendering. All types live in `Program.cs`.
 
-- **`Punch.CLI`** — the main executable (assembles as `punch`). Uses `CommandApp<PunchCommand>` with a default command that renders a full-screen alternate buffer layout.
-- All types currently live in `Program.cs`: `Program`, `PunchCommandSettings`, and `PunchCommand`.
-- `--version` / `-v` is a `PunchCommandSettings` option handled in `PunchCommand.Execute` (reads `AssemblyInformationalVersionAttribute`).
+- **`PunchCommand`** — default command; renders a full-screen alternate buffer TUI with timeline, entry list, input, and status bar via `AnsiConsole.Live`.
+- **`PunchCommandSettings`** — CLI options: `--version`/`-v`, `--date`/`-d` (yyyy-MM-dd override).
+- **`TimeBlock`** — immutable record representing a booked time slot (StartSlot, Length, Label). Slots are 0–95 (96 quarter-hours in a day).
+- **`PunchStorage`** — static helper for JSON persistence. One file per day at `~/.punch/data/yyyy-MM-dd.json`. Auto-saves on every add, edit, and delete. Validates blocks on load (skips invalid/overlapping).
+- **`PunchData` / `TimeBlockDto`** — JSON serialization DTOs.
 
 ## Conventions
 

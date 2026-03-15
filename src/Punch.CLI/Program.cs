@@ -59,7 +59,8 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                     new Layout("Timeline").Size(5),
                     new Layout("Messages").Ratio(4),
                     new Layout("Input").Ratio(1),
-                    new Layout("Footer").Size(1));
+                    new Layout("Footer").Size(1),
+                    new Layout("StatusBar").Size(1));
 
             AnsiConsole.Live(layout).Start(ctx =>
             {
@@ -445,5 +446,18 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
             ? "[dim]Press [bold]← →[/] move | [bold]Ctrl+D[/] delete | [bold]Ctrl+E[/] edit | [bold]Ctrl+Q[/] quit[/]"
             : "[dim]Press [bold]← →[/] move | [bold]↑ ↓[/] resize | [bold]Enter[/] send | [bold]Ctrl+Q[/] quit[/]";
         layout["Footer"].Update(new Markup(footerText));
+
+        // Status bar
+        var totalMinutesAll = bookedBlocks.Sum(b => b.Length * 15);
+        var totalHours = totalMinutesAll / 60;
+        var totalMins = totalMinutesAll % 60;
+        var totalFormatted = totalMins > 0 ? $"{totalHours}h {totalMins}m" : $"{totalHours}h 0m";
+        var percent = totalMinutesAll * 100 / 480;
+        var dateStr = DateTime.Now.ToString("yyyy-MM-dd");
+        var statusLeft = $"  {dateStr}";
+        var statusRight = $"{totalFormatted}    {percent}% of 8h  ";
+        var padding = Math.Max(0, consoleWidth - statusLeft.Length - statusRight.Length);
+        var statusPadded = statusLeft + new string(' ', padding) + statusRight;
+        layout["StatusBar"].Update(new Markup($"[white on blue]{Markup.Escape(statusPadded)}[/]"));
     }
 }

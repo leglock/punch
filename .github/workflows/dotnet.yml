@@ -51,15 +51,24 @@ jobs:
         dotnet publish src/Punch.CLI -c Release -r win-x64 --self-contained \
           -p:PublishSingleFile=true \
           -p:Version=${{ steps.version.outputs.base }}-build.${{ github.run_number }}
-    - name: Zip output
+    - name: Publish Linux binary
+      run: |
+        dotnet publish src/Punch.CLI -c Release -r linux-x64 --self-contained \
+          -p:PublishSingleFile=true \
+          -p:Version=${{ steps.version.outputs.base }}-build.${{ github.run_number }}
+    - name: Zip outputs
       run: |
         cd src/Punch.CLI/bin/Release/net10.0/win-x64/publish
         zip -j "$GITHUB_WORKSPACE/punch-win-x64.zip" punch.exe
+        cd "$GITHUB_WORKSPACE"
+        cd src/Punch.CLI/bin/Release/net10.0/linux-x64/publish
+        tar -czf "$GITHUB_WORKSPACE/punch-linux-x64.tar.gz" punch
     - name: Create GitHub release
       env:
         GH_TOKEN: ${{ github.token }}
       run: |
         gh release create "${{ steps.version.outputs.tag }}" \
           punch-win-x64.zip \
+          punch-linux-x64.tar.gz \
           --title "${{ steps.version.outputs.tag }}" \
           --generate-notes

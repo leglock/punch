@@ -335,12 +335,11 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
         // Build hour labels line
         var labelChars = new char[barWidth];
         Array.Fill(labelChars, ' ');
-        var hourMarkers = new[] { 0, 6, 12, 18, 24 };
+        var hourMarkers = new[] { 6, 12, 18 };
         foreach (var h in hourMarkers)
         {
             var pos = (int)((double)(h * 4) / 96 * barWidth);
-            if (h == 24) pos = barWidth - 1;
-            var label = h.ToString();
+            var label = h == 12 ? "12pm" : h < 12 ? $"{h}am" : $"{h - 12}pm";
             for (var i = 0; i < label.Length && pos + i < barWidth; i++)
                 labelChars[pos + i] = label[i];
         }

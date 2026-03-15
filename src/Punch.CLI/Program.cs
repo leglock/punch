@@ -42,7 +42,6 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
             return 0;
         }
 
-        var messages = new List<string>();
         var inputBuffer = new StringBuilder();
         var cursorSlot = 0; // 0–95: 96 quarter-hour slots (00:00–23:45)
         var selectionLength = 1; // number of 15-min slots selected (min 1)
@@ -62,7 +61,7 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
 
             AnsiConsole.Live(layout).Start(ctx =>
             {
-                UpdateLayout(layout, messages, inputBuffer, cursorSlot: cursorSlot, selectionLength: selectionLength, occupied: occupied);
+                UpdateLayout(layout, bookedBlocks, inputBuffer, cursorSlot: cursorSlot, selectionLength: selectionLength, occupied: occupied);
                 ctx.Refresh();
 
                 var confirming = false;
@@ -77,7 +76,7 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                             break;
 
                         confirming = false;
-                        UpdateLayout(layout, messages, inputBuffer, cursorSlot: cursorSlot, selectionLength: selectionLength, occupied: occupied);
+                        UpdateLayout(layout, bookedBlocks, inputBuffer, cursorSlot: cursorSlot, selectionLength: selectionLength, occupied: occupied);
                         ctx.Refresh();
                         continue;
                     }
@@ -85,7 +84,7 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                     if (key.Key == ConsoleKey.Q && key.Modifiers.HasFlag(ConsoleModifiers.Control))
                     {
                         confirming = true;
-                        UpdateLayout(layout, messages, inputBuffer, confirming: true, cursorSlot: cursorSlot, selectionLength: selectionLength, occupied: occupied);
+                        UpdateLayout(layout, bookedBlocks, inputBuffer, confirming: true, cursorSlot: cursorSlot, selectionLength: selectionLength, occupied: occupied);
                         ctx.Refresh();
                         continue;
                     }
@@ -106,13 +105,13 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                         if (next + selectionLength <= 96)
                             cursorSlot = next;
                     }
-                    else if (key.KeyChar == '+')
+                    else if (key.Key == ConsoleKey.UpArrow)
                     {
                         var newLen = selectionLength + 1;
                         if (cursorSlot + newLen <= 96 && !IsOverlapping(cursorSlot, newLen, occupied))
                             selectionLength = newLen;
                     }
-                    else if (key.KeyChar == '-')
+                    else if (key.Key == ConsoleKey.DownArrow)
                     {
                         if (selectionLength > 1)
                             selectionLength--;
@@ -127,13 +126,6 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                             for (var s = block.StartSlot; s < block.StartSlot + block.Length; s++)
                                 occupied[s] = true;
 
-                            var sh = cursorSlot / 4;
-                            var sm = (cursorSlot % 4) * 15;
-                            var es = cursorSlot + selectionLength;
-                            var eh = es / 4;
-                            var em = (es % 4) * 15;
-                            var escaped = Markup.Escape(label);
-                            messages.Add($"[green]■[/] [bold]{sh:D2}:{sm:D2}\u2013{eh:D2}:{em:D2}[/] {escaped}");
                             inputBuffer.Clear();
 
                             // Move cursor to next free position
@@ -154,7 +146,7 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                         inputBuffer.Append(key.KeyChar);
                     }
 
-                    UpdateLayout(layout, messages, inputBuffer, cursorSlot: cursorSlot, selectionLength: selectionLength, occupied: occupied);
+                    UpdateLayout(layout, bookedBlocks, inputBuffer, cursorSlot: cursorSlot, selectionLength: selectionLength, occupied: occupied);
                     ctx.Refresh();
                 }
             });
@@ -171,7 +163,7 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
         return false;
     }
 
-    private static void UpdateLayout(Layout layout, List<string> messages, StringBuilder inputBuffer, bool confirming = false, int cursorSlot = 0, int selectionLength = 1, bool[]? occupied = null)
+    private static void UpdateLayout(Layout layout, List<TimeBlock> bookedBlocks, StringBuilder inputBuffer, bool confirming = false, int cursorSlot = 0, int selectionLength = 1, bool[]? occupied = null)
     {
         // Timeline pane
         var consoleWidth = System.Console.WindowWidth;
@@ -254,21 +246,31 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                 .Expand()
                 .Border(BoxBorder.Rounded));
 
-        // Messages pane: show recent messages that fit
+        // Messages pane: show booked blocks sorted chronologically
         var consoleHeight = System.Console.WindowHeight;
         var messagesHeight = Math.Max(1, (int)(consoleHeight * 0.8) - 2); // account for panel border
-        var visibleMessages = messages.Count > messagesHeight
-            ? messages.Skip(messages.Count - messagesHeight).ToList()
-            : messages;
+        var sortedBlocks = bookedBlocks.OrderBy(b => b.StartSlot).ToList();
+        var visibleBlocks = sortedBlocks.Count > messagesHeight
+            ? sortedBlocks.Skip(sortedBlocks.Count - messagesHeight).ToList()
+            : sortedBlocks;
 
         IRenderable messagesContent;
-        if (visibleMessages.Count == 0)
+        if (visibleBlocks.Count == 0)
         {
-            messagesContent = new Markup("[dim]No messages yet. Type below and press Enter.[/]");
+            messagesContent = new Markup("[dim]No entries yet. Select a time range and press Enter.[/]");
         }
         else
         {
-            var renderables = visibleMessages.Select(m => (IRenderable)new Markup(m)).ToArray();
+            var renderables = visibleBlocks.Select(b =>
+            {
+                var sh = b.StartSlot / 4;
+                var sm = (b.StartSlot % 4) * 15;
+                var es = b.StartSlot + b.Length;
+                var eh = es / 4;
+                var em = (es % 4) * 15;
+                var escaped = Markup.Escape(b.Label);
+                return (IRenderable)new Markup($"[green]\u25a0[/] [bold]{sh:D2}:{sm:D2}\u2013{eh:D2}:{em:D2}[/] {escaped}");
+            }).ToArray();
             messagesContent = new Rows(renderables);
         }
 
@@ -297,6 +299,6 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
 
         // Footer
         layout["Footer"].Update(
-            new Markup("[dim]Press [bold]← →[/] move | [bold]+/−[/] resize | [bold]Enter[/] send | [bold]Ctrl+Q[/] quit[/]"));
+            new Markup("[dim]Press [bold]← →[/] move | [bold]↑ ↓[/] resize | [bold]Enter[/] send | [bold]Ctrl+Q[/] quit[/]"));
     }
 }

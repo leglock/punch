@@ -28,6 +28,8 @@ internal sealed class PunchCommandSettings : CommandSettings
     public bool Version { get; set; }
 }
 
+internal sealed record TimeBlock(int StartSlot, int Length, string Label);
+
 internal sealed class PunchCommand : Command<PunchCommandSettings>
 {
     public override int Execute(CommandContext context, PunchCommandSettings settings)
@@ -43,6 +45,9 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
         var messages = new List<string>();
         var inputBuffer = new StringBuilder();
         var cursorSlot = 0; // 0–95: 96 quarter-hour slots (00:00–23:45)
+        var selectionLength = 1; // number of 15-min slots selected (min 1)
+        var bookedBlocks = new List<TimeBlock>();
+        var occupied = new bool[96];
 
         AnsiConsole.AlternateScreen(() =>
         {
@@ -57,7 +62,7 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
 
             AnsiConsole.Live(layout).Start(ctx =>
             {
-                UpdateLayout(layout, messages, inputBuffer, cursorSlot: cursorSlot);
+                UpdateLayout(layout, messages, inputBuffer, cursorSlot: cursorSlot, selectionLength: selectionLength, occupied: occupied);
                 ctx.Refresh();
 
                 var confirming = false;
@@ -72,7 +77,7 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                             break;
 
                         confirming = false;
-                        UpdateLayout(layout, messages, inputBuffer, cursorSlot: cursorSlot);
+                        UpdateLayout(layout, messages, inputBuffer, cursorSlot: cursorSlot, selectionLength: selectionLength, occupied: occupied);
                         ctx.Refresh();
                         continue;
                     }
@@ -80,29 +85,63 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                     if (key.Key == ConsoleKey.Q && key.Modifiers.HasFlag(ConsoleModifiers.Control))
                     {
                         confirming = true;
-                        UpdateLayout(layout, messages, inputBuffer, confirming: true);
+                        UpdateLayout(layout, messages, inputBuffer, confirming: true, cursorSlot: cursorSlot, selectionLength: selectionLength, occupied: occupied);
                         ctx.Refresh();
                         continue;
                     }
 
                     if (key.Key == ConsoleKey.LeftArrow)
                     {
-                        if (cursorSlot > 0)
-                            cursorSlot--;
+                        var next = cursorSlot - 1;
+                        while (next >= 0 && IsOverlapping(next, selectionLength, occupied))
+                            next--;
+                        if (next >= 0)
+                            cursorSlot = next;
                     }
                     else if (key.Key == ConsoleKey.RightArrow)
                     {
-                        if (cursorSlot < 95)
-                            cursorSlot++;
+                        var next = cursorSlot + 1;
+                        while (next + selectionLength <= 96 && IsOverlapping(next, selectionLength, occupied))
+                            next++;
+                        if (next + selectionLength <= 96)
+                            cursorSlot = next;
+                    }
+                    else if (key.KeyChar == '+')
+                    {
+                        var newLen = selectionLength + 1;
+                        if (cursorSlot + newLen <= 96 && !IsOverlapping(cursorSlot, newLen, occupied))
+                            selectionLength = newLen;
+                    }
+                    else if (key.KeyChar == '-')
+                    {
+                        if (selectionLength > 1)
+                            selectionLength--;
                     }
                     else if (key.Key == ConsoleKey.Enter)
                     {
                         if (inputBuffer.Length > 0)
                         {
-                            var timestamp = DateTime.Now.ToString("HH:mm:ss");
-                            var escaped = Markup.Escape(inputBuffer.ToString());
-                            messages.Add($"[dim]{timestamp}[/] {escaped}");
+                            var label = inputBuffer.ToString();
+                            var block = new TimeBlock(cursorSlot, selectionLength, label);
+                            bookedBlocks.Add(block);
+                            for (var s = block.StartSlot; s < block.StartSlot + block.Length; s++)
+                                occupied[s] = true;
+
+                            var sh = cursorSlot / 4;
+                            var sm = (cursorSlot % 4) * 15;
+                            var es = cursorSlot + selectionLength;
+                            var eh = es / 4;
+                            var em = (es % 4) * 15;
+                            var escaped = Markup.Escape(label);
+                            messages.Add($"[green]■[/] [bold]{sh:D2}:{sm:D2}\u2013{eh:D2}:{em:D2}[/] {escaped}");
                             inputBuffer.Clear();
+
+                            // Move cursor to next free position
+                            selectionLength = 1;
+                            while (cursorSlot < 96 && occupied[cursorSlot])
+                                cursorSlot++;
+                            if (cursorSlot >= 96)
+                                cursorSlot = 95;
                         }
                     }
                     else if (key.Key == ConsoleKey.Backspace)
@@ -115,7 +154,7 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                         inputBuffer.Append(key.KeyChar);
                     }
 
-                    UpdateLayout(layout, messages, inputBuffer, cursorSlot: cursorSlot);
+                    UpdateLayout(layout, messages, inputBuffer, cursorSlot: cursorSlot, selectionLength: selectionLength, occupied: occupied);
                     ctx.Refresh();
                 }
             });
@@ -124,20 +163,47 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
         return 0;
     }
 
-    private static void UpdateLayout(Layout layout, List<string> messages, StringBuilder inputBuffer, bool confirming = false, int cursorSlot = 0)
+    private static bool IsOverlapping(int start, int length, bool[] occupied)
+    {
+        for (var i = start; i < start + length && i < 96; i++)
+            if (occupied[i])
+                return true;
+        return false;
+    }
+
+    private static void UpdateLayout(Layout layout, List<string> messages, StringBuilder inputBuffer, bool confirming = false, int cursorSlot = 0, int selectionLength = 1, bool[]? occupied = null)
     {
         // Timeline pane
         var consoleWidth = System.Console.WindowWidth;
         var barWidth = Math.Max(1, consoleWidth - 4); // account for panel border + padding
-        var cursorHours = cursorSlot / 4;
-        var cursorMinutes = (cursorSlot % 4) * 15;
-        var timeLabel = $"{cursorHours:D2}:{cursorMinutes:D2}";
+        var startHours = cursorSlot / 4;
+        var startMinutes = (cursorSlot % 4) * 15;
+        var endSlot = cursorSlot + selectionLength;
+        var endHours = endSlot / 4;
+        var endMinutes = (endSlot % 4) * 15;
+        var timeLabel = $"{startHours:D2}:{startMinutes:D2}\u2013{endHours:D2}:{endMinutes:D2}";
 
-        // Build the bar line with cursor marker
-        var barChars = new char[barWidth];
-        Array.Fill(barChars, '─');
-        var cursorPos = (int)((double)cursorSlot / 95 * (barWidth - 1));
-        barChars[cursorPos] = '▼';
+        // Build the bar line: mark booked slots, then overlay selection
+        // Each pixel maps to a slot range; tag pixels as: 'free', 'booked', 'selected'
+        var pixelState = new int[barWidth]; // 0=free, 1=booked, 2=selected
+        var occ = occupied ?? new bool[96];
+        for (var px = 0; px < barWidth; px++)
+        {
+            var slotStart = (int)((double)px / barWidth * 96);
+            var slotEnd = (int)((double)(px + 1) / barWidth * 96);
+            if (slotEnd <= slotStart) slotEnd = slotStart + 1;
+            for (var s = slotStart; s < slotEnd && s < 96; s++)
+            {
+                if (occ[s]) { pixelState[px] = 1; break; }
+            }
+        }
+
+        var selStartPos = (int)((double)cursorSlot / 96 * barWidth);
+        var selEndPos = (int)((double)endSlot / 96 * barWidth) - 1;
+        selStartPos = Math.Clamp(selStartPos, 0, barWidth - 1);
+        selEndPos = Math.Clamp(selEndPos, selStartPos, barWidth - 1);
+        for (var i = selStartPos; i <= selEndPos; i++)
+            pixelState[i] = 2;
 
         // Build hour labels line
         var labelChars = new char[barWidth];
@@ -152,14 +218,34 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                 labelChars[pos + i] = label[i];
         }
 
-        // Position the time label above the cursor
-        var timeLabelStart = Math.Max(0, Math.Min(cursorPos - timeLabel.Length / 2, barWidth - timeLabel.Length));
+        // Position the time label above the selection midpoint
+        var midPos = (selStartPos + selEndPos) / 2;
+        var timeLabelStart = Math.Max(0, Math.Min(midPos - timeLabel.Length / 2, barWidth - timeLabel.Length));
         var topLine = new string(' ', timeLabelStart) + timeLabel;
 
-        var barMarkup = new string(barChars).Replace("▼", "[bold yellow]▼[/]");
+        // Build bar markup with colored segments
+        var barMarkup = new StringBuilder();
+        var currentState = -1;
+        for (var i = 0; i < barWidth; i++)
+        {
+            if (pixelState[i] != currentState)
+            {
+                if (currentState >= 0) barMarkup.Append("[/]");
+                currentState = pixelState[i];
+                barMarkup.Append(currentState switch
+                {
+                    1 => "[green]",
+                    2 => "[bold yellow]",
+                    _ => "[dim]"
+                });
+            }
+            barMarkup.Append(currentState == 0 ? '─' : '█');
+        }
+        if (currentState >= 0) barMarkup.Append("[/]");
+
         var timelineContent = new Rows(
             new Markup($"[bold]{Markup.Escape(topLine)}[/]"),
-            new Markup(barMarkup),
+            new Markup(barMarkup.ToString()),
             new Markup($"[dim]{Markup.Escape(new string(labelChars))}[/]"));
 
         layout["Timeline"].Update(
@@ -211,6 +297,6 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
 
         // Footer
         layout["Footer"].Update(
-            new Markup("[dim]Press [bold]← →[/] to move cursor | [bold]Enter[/] to send | [bold]Ctrl+Q[/] to quit[/]"));
+            new Markup("[dim]Press [bold]← →[/] move | [bold]+/−[/] resize | [bold]Enter[/] send | [bold]Ctrl+Q[/] quit[/]"));
     }
 }

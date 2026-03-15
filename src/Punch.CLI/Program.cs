@@ -93,35 +93,87 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
 
                     if (key.Key == ConsoleKey.LeftArrow)
                     {
-                        if (cursorSlot > 0)
+                        if (selectedBlock != null)
                         {
-                            cursorSlot--;
-                            selectionLength = 1;
-                            selectedBlock = FindBlockAt(cursorSlot, bookedBlocks);
-                            if (selectedBlock != null)
+                            // On an existing block: jump to slot just before it
+                            var target = selectedBlock.StartSlot - 1;
+                            if (target >= 0)
                             {
-                                cursorSlot = selectedBlock.StartSlot;
-                                selectionLength = selectedBlock.Length;
+                                var adj = FindBlockAt(target, bookedBlocks);
+                                if (adj != null)
+                                {
+                                    cursorSlot = adj.StartSlot;
+                                    selectionLength = adj.Length;
+                                    selectedBlock = adj;
+                                }
+                                else
+                                {
+                                    cursorSlot = target;
+                                    selectionLength = 1;
+                                    selectedBlock = null;
+                                }
                             }
-                            editing = false;
-                            inputBuffer.Clear();
                         }
+                        else if (cursorSlot > 0)
+                        {
+                            // Free selection: slide left by 1, keeping length
+                            var newStart = cursorSlot - 1;
+                            var adj = FindBlockAt(newStart, bookedBlocks);
+                            if (adj != null)
+                            {
+                                cursorSlot = adj.StartSlot;
+                                selectionLength = adj.Length;
+                                selectedBlock = adj;
+                            }
+                            else if (!occupied[newStart])
+                            {
+                                cursorSlot = newStart;
+                            }
+                        }
+                        editing = false;
+                        inputBuffer.Clear();
                     }
                     else if (key.Key == ConsoleKey.RightArrow)
                     {
-                        if (cursorSlot + selectionLength < 96)
+                        if (selectedBlock != null)
                         {
-                            cursorSlot = cursorSlot + selectionLength;
-                            selectionLength = 1;
-                            selectedBlock = FindBlockAt(cursorSlot, bookedBlocks);
-                            if (selectedBlock != null)
+                            // On an existing block: jump to slot just after it
+                            var target = selectedBlock.StartSlot + selectedBlock.Length;
+                            if (target < 96)
                             {
-                                cursorSlot = selectedBlock.StartSlot;
-                                selectionLength = selectedBlock.Length;
+                                var adj = FindBlockAt(target, bookedBlocks);
+                                if (adj != null)
+                                {
+                                    cursorSlot = adj.StartSlot;
+                                    selectionLength = adj.Length;
+                                    selectedBlock = adj;
+                                }
+                                else
+                                {
+                                    cursorSlot = target;
+                                    selectionLength = 1;
+                                    selectedBlock = null;
+                                }
                             }
-                            editing = false;
-                            inputBuffer.Clear();
                         }
+                        else if (cursorSlot + selectionLength < 96)
+                        {
+                            // Free selection: slide right by 1, keeping length
+                            var newEnd = cursorSlot + selectionLength; // the slot that would become the new last slot
+                            var adj = FindBlockAt(newEnd, bookedBlocks);
+                            if (adj != null)
+                            {
+                                cursorSlot = adj.StartSlot;
+                                selectionLength = adj.Length;
+                                selectedBlock = adj;
+                            }
+                            else if (!occupied[newEnd])
+                            {
+                                cursorSlot++;
+                            }
+                        }
+                        editing = false;
+                        inputBuffer.Clear();
                     }
                     else if (key.Key == ConsoleKey.UpArrow)
                     {

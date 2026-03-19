@@ -536,7 +536,6 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
 
         layout["Timeline"].Update(
             new Panel(timelineContent)
-                .Header("[bold][red]p[/][orangered1]u[/][darkorange]n[/][orange3]c[/][orange1]h[/][/]", Justify.Center)
                 .Expand()
                 .Border(BoxBorder.Rounded));
 
@@ -578,6 +577,9 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
 
         if (showHelp)
         {
+            var version = Assembly.GetExecutingAssembly()
+                .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "0.0.0";
+            var titleLine = new Markup($"[bold][red]p[/][orangered1]u[/][darkorange]n[/][orange3]c[/][orange1]h[/][/] [dim]v{Markup.Escape(version)}[/]");
             var helpText = new Markup(
                 "[bold]← →[/]        Move cursor / Jump between blocks\n" +
                 "[bold]↑ ↓[/]        Resize selection\n" +
@@ -586,8 +588,11 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                 "[bold]Ctrl+D[/]     Delete selected entry\n" +
                 "[bold]Ctrl+Q[/]     Quit\n" +
                 "[bold]?[/]          Toggle this help");
-            var helpPanel = new Panel(helpText)
-                .Header("Keyboard Shortcuts")
+            var helpContent = new Rows(
+                Align.Center(titleLine),
+                new Text(" "),
+                helpText);
+            var helpPanel = new Panel(helpContent)
                 .Border(BoxBorder.Rounded)
                 .Expand();
             layout["Messages"].Update(

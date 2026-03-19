@@ -467,75 +467,102 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
         var endMinutes = (endSlot % 4) * 15;
         var timeLabel = $"{startHours:D2}:{startMinutes:D2}\u2013{endHours:D2}:{endMinutes:D2}";
 
+        // Sort blocks chronologically so alternating colors are consistent
+        bookedBlocks.Sort((a, b) => a.StartSlot.CompareTo(b.StartSlot));
+
         // Build the bar line: mark booked slots, then overlay selection
-        // Each pixel maps to a slot range; tag pixels as: 'free', 'booked', 'selected'
-        var pixelState = new int[barWidth]; // 0=free, 1=booked, 2=selected, 3=selected-existing
-        foreach (var block in bookedBlocks)
+        // Fixed pixels-per-slot for uniform block widths
+        var pixelsPerSlot = Math.Max(1, barWidth / 96);
+        var totalBarWidth = pixelsPerSlot * 96;
+        var pixelState = new int[totalBarWidth]; // 0=free, 1=booked, 2=selected, 3=selected-existing
+        var pixelBlockIndex = new int[totalBarWidth];
+        Array.Fill(pixelBlockIndex, -1);
+        for (var blockIdx = 0; blockIdx < bookedBlocks.Count; blockIdx++)
         {
-            var bStart = (int)((double)block.StartSlot / 96 * barWidth);
-            var bEndExcl = (int)((double)(block.StartSlot + block.Length) / 96 * barWidth);
-            bStart = Math.Clamp(bStart, 0, barWidth);
-            bEndExcl = Math.Clamp(bEndExcl, bStart, barWidth);
-            if (bEndExcl == bStart) bEndExcl = bStart + 1; // at least 1 pixel
-            for (var px = bStart; px < bEndExcl && px < barWidth; px++)
+            var block = bookedBlocks[blockIdx];
+            var bStart = block.StartSlot * pixelsPerSlot;
+            var bEndExcl = (block.StartSlot + block.Length) * pixelsPerSlot;
+            bStart = Math.Clamp(bStart, 0, totalBarWidth);
+            bEndExcl = Math.Clamp(bEndExcl, bStart, totalBarWidth);
+            for (var px = bStart; px < bEndExcl; px++)
+            {
                 pixelState[px] = 1;
+                pixelBlockIndex[px] = blockIdx;
+            }
         }
 
-        var selStartPos = (int)((double)cursorSlot / 96 * barWidth);
-        var selEndExcl = (int)((double)endSlot / 96 * barWidth);
+        var selStartPos = cursorSlot * pixelsPerSlot;
+        var selEndExcl = endSlot * pixelsPerSlot;
         if (selEndExcl == selStartPos) selEndExcl = selStartPos + 1;
-        selStartPos = Math.Clamp(selStartPos, 0, barWidth - 1);
-        var selEndPos = Math.Clamp(selEndExcl - 1, selStartPos, barWidth - 1);
+        selStartPos = Math.Clamp(selStartPos, 0, totalBarWidth - 1);
+        var selEndPos = Math.Clamp(selEndExcl - 1, selStartPos, totalBarWidth - 1);
         // State 3 = selected existing block (cyan), State 2 = free selection (yellow)
         var selPixelState = selectedBlock != null ? 3 : 2;
         for (var i = selStartPos; i <= selEndPos; i++)
             pixelState[i] = selPixelState;
 
         // Build hour labels line
-        var labelChars = new char[barWidth];
+        var labelChars = new char[totalBarWidth];
         Array.Fill(labelChars, ' ');
-        var hourMarkers = new[] { 6, 12, 18 };
+        var hourMarkers = new[] { 0, 6, 12, 18, 24 };
         foreach (var h in hourMarkers)
         {
-            var pos = (int)((double)(h * 4) / 96 * barWidth);
+            var pos = h * 4 * pixelsPerSlot;
             var label = h == 12 ? "12pm" : h < 12 ? $"{h}am" : $"{h - 12}pm";
-            for (var i = 0; i < label.Length && pos + i < barWidth; i++)
+            if (h == 0 || h == 24) label = "12am";
+            // Right-align the end marker so it doesn't overflow
+            if (h == 24) pos = totalBarWidth - label.Length;
+            for (var i = 0; i < label.Length && pos + i < totalBarWidth; i++)
                 labelChars[pos + i] = label[i];
         }
 
         // Position the time label above the selection midpoint
         var midPos = (selStartPos + selEndPos) / 2;
-        var timeLabelStart = Math.Max(0, Math.Min(midPos - timeLabel.Length / 2, barWidth - timeLabel.Length));
+        var timeLabelStart = Math.Max(0, Math.Min(midPos - timeLabel.Length / 2, totalBarWidth - timeLabel.Length));
         var topLine = new string(' ', timeLabelStart) + timeLabel;
 
-        // Build bar markup with colored segments
+        // Build bar markup with colored segments (alternating colors for adjacent blocks)
         var barMarkup = new StringBuilder();
         var currentState = -1;
-        for (var i = 0; i < barWidth; i++)
+        var currentBlockIndex = -1;
+        for (var i = 0; i < totalBarWidth; i++)
         {
-            if (pixelState[i] != currentState)
+            var needNewTag = pixelState[i] != currentState ||
+                             (pixelState[i] == 1 && pixelBlockIndex[i] != currentBlockIndex);
+            if (needNewTag)
             {
                 if (currentState >= 0) barMarkup.Append("[/]");
                 currentState = pixelState[i];
+                currentBlockIndex = pixelBlockIndex[i];
                 barMarkup.Append(currentState switch
                 {
-                    1 => "[green]",
+                    1 => currentBlockIndex % 2 == 0 ? "[orangered1]" : "[orange3]",
                     2 => "[bold yellow]",
-                    3 => "[bold cyan]",
+                    3 => "[bold white]",
                     _ => "[dim]"
                 });
             }
-            barMarkup.Append(currentState == 0 ? '─' : '█');
+            barMarkup.Append(currentState switch
+            {
+                0 => '─',
+                3 => '▒',
+                _ => '█'
+            });
         }
         if (currentState >= 0) barMarkup.Append("[/]");
 
+        // Center the bar within the panel width
+        var pad = Math.Max(0, (barWidth - totalBarWidth) / 2);
+        var padStr = new string(' ', pad);
+
         var timelineContent = new Rows(
-            new Markup($"[bold]{Markup.Escape(topLine)}[/]"),
-            new Markup(barMarkup.ToString()),
-            new Markup($"[dim]{Markup.Escape(new string(labelChars))}[/]"));
+            new Markup($"[bold]{Markup.Escape(padStr + topLine)}[/]"),
+            new Markup(padStr + barMarkup.ToString()),
+            new Markup($"[dim]{Markup.Escape(padStr + new string(labelChars))}[/]"));
 
         layout["Timeline"].Update(
             new Panel(timelineContent)
+                .Header("Timeline")
                 .Expand()
                 .Border(BoxBorder.Rounded));
 
@@ -563,7 +590,8 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                 var em = (es % 4) * 15;
                 var escaped = Markup.Escape(b.Label);
                 var isSelected = selectedBlock != null && b.StartSlot == selectedBlock.StartSlot && b.Length == selectedBlock.Length;
-                var squareColor = isSelected ? "cyan" : "green";
+                var blockIdx = bookedBlocks.IndexOf(b);
+                var squareColor = isSelected ? "white" : blockIdx % 2 == 0 ? "orangered1" : "orange3";
                 var totalMinutes = b.Length * 15;
                 var durationText = totalMinutes >= 60
                     ? totalMinutes % 60 == 0

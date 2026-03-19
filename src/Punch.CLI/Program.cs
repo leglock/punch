@@ -197,7 +197,7 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
 
                     if (confirming)
                     {
-                        if (key.KeyChar is 'y' or 'Y')
+                        if (key.Key == ConsoleKey.Q)
                             break;
 
                         confirming = false;
@@ -586,7 +586,7 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                 "[bold]Enter[/]      Log time entry\n" +
                 "[bold]Ctrl+E[/]     Edit selected entry\n" +
                 "[bold]Ctrl+D[/]     Delete selected entry\n" +
-                "[bold]Ctrl+Q[/]     Quit\n" +
+                "[bold]Ctrl+Q, Q[/]  Quit\n" +
                 "[bold]?[/]          Toggle this help");
             var helpContent = new Rows(
                 Align.Center(titleLine),
@@ -613,7 +613,7 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
         if (confirming)
         {
             layout["Input"].Update(
-                new Panel(new Markup("[bold yellow]Are you sure you want to quit? [/][dim](y/n)[/]"))
+                new Panel(new Markup("[bold yellow]Press Q again to quit[/]"))
                     .Expand()
                     .Border(BoxBorder.Rounded));
         }

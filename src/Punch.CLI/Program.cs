@@ -154,6 +154,7 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
 
         var filePath = PunchStorage.GetDisplayPath(workingDate);
         var inputBuffer = new StringBuilder();
+        var inputCursor = 0;
         var selectionLength = 1; // number of 15-min slots selected (min 1)
         var bookedBlocks = PunchStorage.Load(workingDate);
         var occupied = new bool[96];
@@ -180,12 +181,12 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                 .SplitRows(
                     new Layout("Timeline").Size(5),
                     new Layout("Messages").Ratio(4),
-                    new Layout("Input").Ratio(1),
+                    new Layout("Input").Size(4),
                     new Layout("StatusBar").Size(1));
 
             AnsiConsole.Live(layout).Start(ctx =>
             {
-                UpdateLayout(layout, bookedBlocks, inputBuffer, filePath, cursorSlot: cursorSlot, selectionLength: selectionLength, occupied: occupied, selectedBlock: selectedBlock, editing: editing, showHelp: showHelp);
+                UpdateLayout(layout, bookedBlocks, inputBuffer, filePath, cursorSlot: cursorSlot, selectionLength: selectionLength, occupied: occupied, selectedBlock: selectedBlock, editing: editing, showHelp: showHelp, inputCursor: inputCursor);
                 ctx.Refresh();
 
                 var confirming = false;
@@ -200,7 +201,7 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                             break;
 
                         confirming = false;
-                        UpdateLayout(layout, bookedBlocks, inputBuffer, filePath, cursorSlot: cursorSlot, selectionLength: selectionLength, occupied: occupied, selectedBlock: selectedBlock, editing: editing, showHelp: showHelp);
+                        UpdateLayout(layout, bookedBlocks, inputBuffer, filePath, cursorSlot: cursorSlot, selectionLength: selectionLength, occupied: occupied, selectedBlock: selectedBlock, editing: editing, showHelp: showHelp, inputCursor: inputCursor);
                         ctx.Refresh();
                         continue;
                     }
@@ -208,7 +209,7 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                     if (key.Key == ConsoleKey.Q && key.Modifiers.HasFlag(ConsoleModifiers.Control))
                     {
                         confirming = true;
-                        UpdateLayout(layout, bookedBlocks, inputBuffer, filePath, confirming: true, cursorSlot: cursorSlot, selectionLength: selectionLength, occupied: occupied, selectedBlock: selectedBlock, editing: editing, showHelp: showHelp);
+                        UpdateLayout(layout, bookedBlocks, inputBuffer, filePath, confirming: true, cursorSlot: cursorSlot, selectionLength: selectionLength, occupied: occupied, selectedBlock: selectedBlock, editing: editing, showHelp: showHelp, inputCursor: inputCursor);
                         ctx.Refresh();
                         continue;
                     }
@@ -216,7 +217,7 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                     if (showHelp)
                     {
                         showHelp = false;
-                        UpdateLayout(layout, bookedBlocks, inputBuffer, filePath, cursorSlot: cursorSlot, selectionLength: selectionLength, occupied: occupied, selectedBlock: selectedBlock, editing: editing, showHelp: showHelp);
+                        UpdateLayout(layout, bookedBlocks, inputBuffer, filePath, cursorSlot: cursorSlot, selectionLength: selectionLength, occupied: occupied, selectedBlock: selectedBlock, editing: editing, showHelp: showHelp, inputCursor: inputCursor);
                         ctx.Refresh();
                         continue;
                     }
@@ -224,12 +225,22 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                     if (key.KeyChar == '?' && selectedBlock == null && !editing && inputBuffer.Length == 0)
                     {
                         showHelp = !showHelp;
-                        UpdateLayout(layout, bookedBlocks, inputBuffer, filePath, cursorSlot: cursorSlot, selectionLength: selectionLength, occupied: occupied, selectedBlock: selectedBlock, editing: editing, showHelp: showHelp);
+                        UpdateLayout(layout, bookedBlocks, inputBuffer, filePath, cursorSlot: cursorSlot, selectionLength: selectionLength, occupied: occupied, selectedBlock: selectedBlock, editing: editing, showHelp: showHelp, inputCursor: inputCursor);
                         ctx.Refresh();
                         continue;
                     }
 
-                    if (key.Key == ConsoleKey.LeftArrow)
+                    if (key.Key == ConsoleKey.LeftArrow && inputBuffer.Length > 0)
+                    {
+                        if (inputCursor > 0)
+                            inputCursor--;
+                    }
+                    else if (key.Key == ConsoleKey.RightArrow && inputBuffer.Length > 0)
+                    {
+                        if (inputCursor < inputBuffer.Length)
+                            inputCursor++;
+                    }
+                    else if (key.Key == ConsoleKey.LeftArrow)
                     {
                         if (selectedBlock != null)
                         {
@@ -269,7 +280,6 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                             }
                         }
                         editing = false;
-                        inputBuffer.Clear();
                     }
                     else if (key.Key == ConsoleKey.RightArrow)
                     {
@@ -311,7 +321,6 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                             }
                         }
                         editing = false;
-                        inputBuffer.Clear();
                     }
                     else if (key.Key == ConsoleKey.UpArrow)
                     {
@@ -340,6 +349,7 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                             selectionLength = 1;
                             editing = false;
                             inputBuffer.Clear();
+                            inputCursor = 0;
                         }
                     }
                     else if (key.Key == ConsoleKey.E && key.Modifiers.HasFlag(ConsoleModifiers.Control))
@@ -349,7 +359,9 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                         {
                             editing = true;
                             inputBuffer.Clear();
+                            inputCursor = 0;
                             inputBuffer.Append(selectedBlock.Label);
+                            inputCursor = inputBuffer.Length;
                         }
                     }
                     else if (key.Key == ConsoleKey.Enter)
@@ -367,6 +379,7 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                             }
                             editing = false;
                             inputBuffer.Clear();
+                            inputCursor = 0;
                         }
                         else if (selectedBlock == null && inputBuffer.Length > 0)
                         {
@@ -378,6 +391,7 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                             PunchStorage.Save(workingDate, bookedBlocks);
 
                             inputBuffer.Clear();
+                            inputCursor = 0;
 
                             // Move cursor to next free position
                             selectionLength = 1;
@@ -389,16 +403,37 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                     }
                     else if (key.Key == ConsoleKey.Backspace)
                     {
+                        if ((selectedBlock == null || editing) && inputCursor > 0)
+                        {
+                            inputBuffer.Remove(inputCursor - 1, 1);
+                            inputCursor--;
+                        }
+                    }
+                    else if (key.Key == ConsoleKey.Delete)
+                    {
+                        if ((selectedBlock == null || editing) && inputCursor < inputBuffer.Length)
+                            inputBuffer.Remove(inputCursor, 1);
+                    }
+                    else if (key.Key == ConsoleKey.End)
+                    {
                         if ((selectedBlock == null || editing) && inputBuffer.Length > 0)
-                            inputBuffer.Remove(inputBuffer.Length - 1, 1);
+                            inputCursor = inputBuffer.Length;
+                    }
+                    else if (key.Key == ConsoleKey.Home)
+                    {
+                        if ((selectedBlock == null || editing) && inputBuffer.Length > 0)
+                            inputCursor = 0;
                     }
                     else if (key.KeyChar != '\0' && !char.IsControl(key.KeyChar))
                     {
                         if (selectedBlock == null || editing)
-                            inputBuffer.Append(key.KeyChar);
+                        {
+                            inputBuffer.Insert(inputCursor, key.KeyChar);
+                            inputCursor++;
+                        }
                     }
 
-                    UpdateLayout(layout, bookedBlocks, inputBuffer, filePath, cursorSlot: cursorSlot, selectionLength: selectionLength, occupied: occupied, selectedBlock: selectedBlock, editing: editing, showHelp: showHelp);
+                    UpdateLayout(layout, bookedBlocks, inputBuffer, filePath, cursorSlot: cursorSlot, selectionLength: selectionLength, occupied: occupied, selectedBlock: selectedBlock, editing: editing, showHelp: showHelp, inputCursor: inputCursor);
                     ctx.Refresh();
                 }
             });
@@ -420,7 +455,7 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
         return false;
     }
 
-    private static void UpdateLayout(Layout layout, List<TimeBlock> bookedBlocks, StringBuilder inputBuffer, string filePath, bool confirming = false, int cursorSlot = 0, int selectionLength = 1, bool[]? occupied = null, TimeBlock? selectedBlock = null, bool editing = false, bool showHelp = false)
+    private static void UpdateLayout(Layout layout, List<TimeBlock> bookedBlocks, StringBuilder inputBuffer, string filePath, bool confirming = false, int cursorSlot = 0, int selectionLength = 1, bool[]? occupied = null, TimeBlock? selectedBlock = null, bool editing = false, bool showHelp = false, int inputCursor = 0)
     {
         // Timeline pane
         var consoleWidth = System.Console.WindowWidth;
@@ -579,9 +614,12 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
         }
         else if (selectedBlock != null && editing)
         {
-            var inputText = Markup.Escape(inputBuffer.ToString());
+            var beforeCursor = Markup.Escape(inputBuffer.ToString()[..inputCursor]);
+            var cursorChar = inputCursor < inputBuffer.Length ? Markup.Escape(inputBuffer.ToString()[inputCursor].ToString()) : " ";
+            var afterCursor = inputCursor < inputBuffer.Length ? Markup.Escape(inputBuffer.ToString()[(inputCursor + 1)..]) : "";
             layout["Input"].Update(
-                new Panel(new Markup($"[cyan]editing:[/] > {inputText}[blink]_[/]"))
+                new Panel(new Markup($"{beforeCursor}[invert]{cursorChar}[/]{afterCursor}"))
+                    .Header("Description [cyan](editing)[/]")
                     .Expand()
                     .Border(BoxBorder.Rounded));
         }
@@ -589,15 +627,19 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
         {
             var labelText = Markup.Escape(selectedBlock.Label);
             layout["Input"].Update(
-                new Panel(new Markup($"[dim]selected:[/] {labelText}"))
+                new Panel(new Markup(labelText))
+                    .Header("Description")
                     .Expand()
                     .Border(BoxBorder.Rounded));
         }
         else
         {
-            var inputText = Markup.Escape(inputBuffer.ToString());
+            var beforeCursor = Markup.Escape(inputBuffer.ToString()[..inputCursor]);
+            var cursorChar = inputCursor < inputBuffer.Length ? Markup.Escape(inputBuffer.ToString()[inputCursor].ToString()) : " ";
+            var afterCursor = inputCursor < inputBuffer.Length ? Markup.Escape(inputBuffer.ToString()[(inputCursor + 1)..]) : "";
             layout["Input"].Update(
-                new Panel(new Markup($"> {inputText}[blink]_[/]"))
+                new Panel(new Markup($"{beforeCursor}[invert]{cursorChar}[/]{afterCursor}"))
+                    .Header("Description")
                     .Expand()
                     .Border(BoxBorder.Rounded));
         }

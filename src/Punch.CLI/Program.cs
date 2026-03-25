@@ -657,8 +657,8 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                 .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "0.0.0";
             var titleLine = new Markup($"[bold][red]p[/][orangered1]u[/][darkorange]n[/][orange3]c[/][orange1]h[/][/] [dim]v{Markup.Escape(version)}[/]");
             var helpText = new Markup(
-                "[bold]← →[/]        Move cursor / Jump between blocks\n" +
-                "[bold]↑ ↓[/]        Resize selection\n" +
+                "[bold]< >[/]        Move cursor / Jump between blocks\n" +
+                "[bold]^ v[/]        Resize selection\n" +
                 "[bold]Enter[/]      Log time entry\n" +
                 "[bold]Tab[/]        Switch input field\n" +
                 "[bold]Ctrl+E[/]     Edit selected entry\n" +

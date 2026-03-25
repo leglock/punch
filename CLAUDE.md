@@ -21,7 +21,7 @@ Single-project .NET 10 console app using Spectre.Console.Cli for command parsing
 
 - **`PunchCommand`** — default command; renders a full-screen alternate buffer TUI with timeline, entry list, input, and status bar via `AnsiConsole.Live`. The `Execute` method contains the entire TUI event loop — keyboard input is processed in a `while(true)` loop with `Console.ReadKey`, mutating local state variables and calling `UpdateLayout` after each keypress.
 - **`PunchCommandSettings`** — CLI options: `--version`/`-v`, `--date`/`-d` (yyyy-MM-dd override).
-- **`TimeBlock`** — immutable record representing a booked time slot (StartSlot, Length, Label). Slots are 0–95 (96 quarter-hours in a day).
+- **`TimeBlock`** — immutable record representing a booked time slot (StartSlot, Length, Label, Ticket). Slots are 0–95 (96 quarter-hours in a day). Ticket is optional (defaults to `""`).
 - **`PunchStorage`** — static helper for JSON persistence. One file per day at `~/.punch/data/yyyy-MM-dd.json`. Auto-saves on every add, edit, and delete. Validates blocks on load (skips invalid/overlapping).
 - **`PunchData` / `TimeBlockDto`** — JSON serialization DTOs.
 
@@ -30,7 +30,9 @@ Single-project .NET 10 console app using Spectre.Console.Cli for command parsing
 The TUI has three modes driven by local variables in the event loop:
 1. **Free cursor** (`selectedBlock == null, !editing`) — arrow keys move cursor/resize selection, typing fills the input buffer, Enter books a new block.
 2. **Block selected** (`selectedBlock != null, !editing`) — navigating onto a booked block selects it. Ctrl+E enters edit mode, Ctrl+D deletes.
-3. **Editing** (`selectedBlock != null, editing`) — input buffer is pre-filled with the block's label; Enter saves the edit.
+3. **Editing** (`selectedBlock != null, editing`) — input buffer is pre-filled with the block's label and ticket; Enter saves the edit (description must be non-empty).
+
+The input panel has two stacked fields (Description and Ticket) with Tab to switch focus. The active field shows a bold label and inverted cursor; the inactive field is dimmed. Ticket input is auto-uppercased. The `activeField` variable (0=Description, 1=Ticket) tracks focus, and `currentBuffer`/`currentCursor` aliases route keyboard input to the correct field.
 
 The timeline bar in `UpdateLayout` maps 96 quarter-hour slots to pixel positions using a fixed `pixelsPerSlot` ratio, with alternating orange colors for adjacent blocks and yellow/white for the current selection.
 

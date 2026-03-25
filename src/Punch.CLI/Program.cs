@@ -33,7 +33,7 @@ internal sealed class PunchCommandSettings : CommandSettings
     public string? Date { get; set; }
 }
 
-internal sealed record TimeBlock(int StartSlot, int Length, string Label);
+internal sealed record TimeBlock(int StartSlot, int Length, string Label, string Ticket = "");
 
 internal sealed class PunchData
 {
@@ -45,6 +45,7 @@ internal sealed class TimeBlockDto
     public int StartSlot { get; set; }
     public int Length { get; set; }
     public string Label { get; set; } = "";
+    public string Ticket { get; set; } = "";
 }
 
 internal static class PunchStorage
@@ -96,7 +97,7 @@ internal static class PunchStorage
                 for (var s = dto.StartSlot; s < dto.StartSlot + dto.Length; s++)
                     occupied[s] = true;
 
-                result.Add(new TimeBlock(dto.StartSlot, dto.Length, dto.Label));
+                result.Add(new TimeBlock(dto.StartSlot, dto.Length, dto.Label, dto.Ticket));
             }
             return result;
         }
@@ -117,7 +118,8 @@ internal static class PunchStorage
             {
                 StartSlot = b.StartSlot,
                 Length = b.Length,
-                Label = b.Label
+                Label = b.Label,
+                Ticket = b.Ticket
             }).ToList()
         };
 
@@ -155,6 +157,9 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
         var filePath = PunchStorage.GetDisplayPath(workingDate);
         var inputBuffer = new StringBuilder();
         var inputCursor = 0;
+        var ticketBuffer = new StringBuilder();
+        var ticketCursor = 0;
+        var activeField = 0; // 0 = Description, 1 = Ticket
         var selectionLength = 1; // number of 15-min slots selected (min 1)
         var bookedBlocks = PunchStorage.Load(workingDate);
         var occupied = new bool[96];
@@ -186,7 +191,7 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
 
             AnsiConsole.Live(layout).Start(ctx =>
             {
-                UpdateLayout(layout, bookedBlocks, inputBuffer, filePath, cursorSlot: cursorSlot, selectionLength: selectionLength, occupied: occupied, selectedBlock: selectedBlock, editing: editing, showHelp: showHelp, inputCursor: inputCursor);
+                UpdateLayout(layout, bookedBlocks, inputBuffer, filePath, cursorSlot: cursorSlot, selectionLength: selectionLength, occupied: occupied, selectedBlock: selectedBlock, editing: editing, showHelp: showHelp, inputCursor: inputCursor, ticketBuffer: ticketBuffer, ticketCursor: ticketCursor, activeField: activeField);
                 ctx.Refresh();
 
                 var confirming = false;
@@ -201,7 +206,7 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                             break;
 
                         confirming = false;
-                        UpdateLayout(layout, bookedBlocks, inputBuffer, filePath, cursorSlot: cursorSlot, selectionLength: selectionLength, occupied: occupied, selectedBlock: selectedBlock, editing: editing, showHelp: showHelp, inputCursor: inputCursor);
+                        UpdateLayout(layout, bookedBlocks, inputBuffer, filePath, cursorSlot: cursorSlot, selectionLength: selectionLength, occupied: occupied, selectedBlock: selectedBlock, editing: editing, showHelp: showHelp, inputCursor: inputCursor, ticketBuffer: ticketBuffer, ticketCursor: ticketCursor, activeField: activeField);
                         ctx.Refresh();
                         continue;
                     }
@@ -209,7 +214,7 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                     if (key.Key == ConsoleKey.Q && key.Modifiers.HasFlag(ConsoleModifiers.Control))
                     {
                         confirming = true;
-                        UpdateLayout(layout, bookedBlocks, inputBuffer, filePath, confirming: true, cursorSlot: cursorSlot, selectionLength: selectionLength, occupied: occupied, selectedBlock: selectedBlock, editing: editing, showHelp: showHelp, inputCursor: inputCursor);
+                        UpdateLayout(layout, bookedBlocks, inputBuffer, filePath, confirming: true, cursorSlot: cursorSlot, selectionLength: selectionLength, occupied: occupied, selectedBlock: selectedBlock, editing: editing, showHelp: showHelp, inputCursor: inputCursor, ticketBuffer: ticketBuffer, ticketCursor: ticketCursor, activeField: activeField);
                         ctx.Refresh();
                         continue;
                     }
@@ -217,28 +222,31 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                     if (showHelp)
                     {
                         showHelp = false;
-                        UpdateLayout(layout, bookedBlocks, inputBuffer, filePath, cursorSlot: cursorSlot, selectionLength: selectionLength, occupied: occupied, selectedBlock: selectedBlock, editing: editing, showHelp: showHelp, inputCursor: inputCursor);
+                        UpdateLayout(layout, bookedBlocks, inputBuffer, filePath, cursorSlot: cursorSlot, selectionLength: selectionLength, occupied: occupied, selectedBlock: selectedBlock, editing: editing, showHelp: showHelp, inputCursor: inputCursor, ticketBuffer: ticketBuffer, ticketCursor: ticketCursor, activeField: activeField);
                         ctx.Refresh();
                         continue;
                     }
 
-                    if (key.KeyChar == '?' && selectedBlock == null && !editing && inputBuffer.Length == 0)
+                    if (key.KeyChar == '?' && selectedBlock == null && !editing && inputBuffer.Length == 0 && ticketBuffer.Length == 0)
                     {
                         showHelp = !showHelp;
-                        UpdateLayout(layout, bookedBlocks, inputBuffer, filePath, cursorSlot: cursorSlot, selectionLength: selectionLength, occupied: occupied, selectedBlock: selectedBlock, editing: editing, showHelp: showHelp, inputCursor: inputCursor);
+                        UpdateLayout(layout, bookedBlocks, inputBuffer, filePath, cursorSlot: cursorSlot, selectionLength: selectionLength, occupied: occupied, selectedBlock: selectedBlock, editing: editing, showHelp: showHelp, inputCursor: inputCursor, ticketBuffer: ticketBuffer, ticketCursor: ticketCursor, activeField: activeField);
                         ctx.Refresh();
                         continue;
                     }
 
-                    if (key.Key == ConsoleKey.LeftArrow && inputBuffer.Length > 0)
+                    var currentBuffer = activeField == 0 ? inputBuffer : ticketBuffer;
+                    var currentCursor = activeField == 0 ? inputCursor : ticketCursor;
+
+                    if (key.Key == ConsoleKey.LeftArrow && currentBuffer.Length > 0)
                     {
-                        if (inputCursor > 0)
-                            inputCursor--;
+                        if (currentCursor > 0)
+                            currentCursor--;
                     }
-                    else if (key.Key == ConsoleKey.RightArrow && inputBuffer.Length > 0)
+                    else if (key.Key == ConsoleKey.RightArrow && currentBuffer.Length > 0)
                     {
-                        if (inputCursor < inputBuffer.Length)
-                            inputCursor++;
+                        if (currentCursor < currentBuffer.Length)
+                            currentCursor++;
                     }
                     else if (key.Key == ConsoleKey.LeftArrow)
                     {
@@ -280,6 +288,7 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                             }
                         }
                         editing = false;
+                        activeField = 0;
                     }
                     else if (key.Key == ConsoleKey.RightArrow)
                     {
@@ -321,6 +330,7 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                             }
                         }
                         editing = false;
+                        activeField = 0;
                     }
                     else if (key.Key == ConsoleKey.UpArrow)
                     {
@@ -350,41 +360,55 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                             editing = false;
                             inputBuffer.Clear();
                             inputCursor = 0;
+                            ticketBuffer.Clear();
+                            ticketCursor = 0;
+                            activeField = 0;
+                            currentCursor = 0;
                         }
                     }
                     else if (key.Key == ConsoleKey.E && key.Modifiers.HasFlag(ConsoleModifiers.Control))
                     {
-                        // Ctrl+E: edit selected block's label
+                        // Ctrl+E: edit selected block's label and ticket
                         if (selectedBlock != null && !editing)
                         {
                             editing = true;
                             inputBuffer.Clear();
-                            inputCursor = 0;
                             inputBuffer.Append(selectedBlock.Label);
                             inputCursor = inputBuffer.Length;
+                            ticketBuffer.Clear();
+                            ticketBuffer.Append(selectedBlock.Ticket);
+                            ticketCursor = ticketBuffer.Length;
+                            activeField = 0;
+                            currentCursor = inputBuffer.Length;
                         }
                     }
                     else if (key.Key == ConsoleKey.Enter)
                     {
-                        if (editing && selectedBlock != null)
+                        if (editing && selectedBlock != null && inputBuffer.Length > 0)
                         {
-                            // Save edited label
+                            // Save edited label and ticket
                             var newLabel = inputBuffer.ToString();
+                            var newTicket = ticketBuffer.ToString();
                             var idx = bookedBlocks.IndexOf(selectedBlock);
                             if (idx >= 0)
                             {
-                                selectedBlock = selectedBlock with { Label = newLabel };
+                                selectedBlock = selectedBlock with { Label = newLabel, Ticket = newTicket };
                                 bookedBlocks[idx] = selectedBlock;
                                 PunchStorage.Save(workingDate, bookedBlocks);
                             }
                             editing = false;
                             inputBuffer.Clear();
                             inputCursor = 0;
+                            ticketBuffer.Clear();
+                            ticketCursor = 0;
+                            activeField = 0;
+                            currentCursor = 0;
                         }
                         else if (selectedBlock == null && inputBuffer.Length > 0)
                         {
                             var label = inputBuffer.ToString();
-                            var block = new TimeBlock(cursorSlot, selectionLength, label);
+                            var ticket = ticketBuffer.ToString();
+                            var block = new TimeBlock(cursorSlot, selectionLength, label, ticket);
                             bookedBlocks.Add(block);
                             for (var s = block.StartSlot; s < block.StartSlot + block.Length; s++)
                                 occupied[s] = true;
@@ -392,6 +416,10 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
 
                             inputBuffer.Clear();
                             inputCursor = 0;
+                            ticketBuffer.Clear();
+                            ticketCursor = 0;
+                            activeField = 0;
+                            currentCursor = 0;
 
                             // Move cursor to next free position
                             selectionLength = 1;
@@ -403,37 +431,56 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                     }
                     else if (key.Key == ConsoleKey.Backspace)
                     {
-                        if ((selectedBlock == null || editing) && inputCursor > 0)
+                        if ((selectedBlock == null || editing) && currentCursor > 0)
                         {
-                            inputBuffer.Remove(inputCursor - 1, 1);
-                            inputCursor--;
+                            currentBuffer.Remove(currentCursor - 1, 1);
+                            currentCursor--;
                         }
                     }
                     else if (key.Key == ConsoleKey.Delete)
                     {
-                        if ((selectedBlock == null || editing) && inputCursor < inputBuffer.Length)
-                            inputBuffer.Remove(inputCursor, 1);
+                        if ((selectedBlock == null || editing) && currentCursor < currentBuffer.Length)
+                            currentBuffer.Remove(currentCursor, 1);
                     }
                     else if (key.Key == ConsoleKey.End)
                     {
-                        if ((selectedBlock == null || editing) && inputBuffer.Length > 0)
-                            inputCursor = inputBuffer.Length;
+                        if ((selectedBlock == null || editing) && currentBuffer.Length > 0)
+                            currentCursor = currentBuffer.Length;
                     }
                     else if (key.Key == ConsoleKey.Home)
                     {
-                        if ((selectedBlock == null || editing) && inputBuffer.Length > 0)
-                            inputCursor = 0;
+                        if ((selectedBlock == null || editing) && currentBuffer.Length > 0)
+                            currentCursor = 0;
+                    }
+                    else if (key.Key == ConsoleKey.Tab)
+                    {
+                        if (selectedBlock == null || editing)
+                        {
+                            // Write back current cursor before switching
+                            if (activeField == 0) inputCursor = currentCursor;
+                            else ticketCursor = currentCursor;
+
+                            activeField = activeField == 0 ? 1 : 0;
+                            // Place cursor at end of newly focused field
+                            if (activeField == 0) currentCursor = inputBuffer.Length;
+                            else currentCursor = ticketBuffer.Length;
+                        }
                     }
                     else if (key.KeyChar != '\0' && !char.IsControl(key.KeyChar))
                     {
                         if (selectedBlock == null || editing)
                         {
-                            inputBuffer.Insert(inputCursor, key.KeyChar);
-                            inputCursor++;
+                            var ch = activeField == 1 ? char.ToUpperInvariant(key.KeyChar) : key.KeyChar;
+                            currentBuffer.Insert(currentCursor, ch);
+                            currentCursor++;
                         }
                     }
 
-                    UpdateLayout(layout, bookedBlocks, inputBuffer, filePath, cursorSlot: cursorSlot, selectionLength: selectionLength, occupied: occupied, selectedBlock: selectedBlock, editing: editing, showHelp: showHelp, inputCursor: inputCursor);
+                    // Write back cursor position to the active field
+                    if (activeField == 0) inputCursor = currentCursor;
+                    else ticketCursor = currentCursor;
+
+                    UpdateLayout(layout, bookedBlocks, inputBuffer, filePath, cursorSlot: cursorSlot, selectionLength: selectionLength, occupied: occupied, selectedBlock: selectedBlock, editing: editing, showHelp: showHelp, inputCursor: inputCursor, ticketBuffer: ticketBuffer, ticketCursor: ticketCursor, activeField: activeField);
                     ctx.Refresh();
                 }
             });
@@ -455,7 +502,7 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
         return false;
     }
 
-    private static void UpdateLayout(Layout layout, List<TimeBlock> bookedBlocks, StringBuilder inputBuffer, string filePath, bool confirming = false, int cursorSlot = 0, int selectionLength = 1, bool[]? occupied = null, TimeBlock? selectedBlock = null, bool editing = false, bool showHelp = false, int inputCursor = 0)
+    private static void UpdateLayout(Layout layout, List<TimeBlock> bookedBlocks, StringBuilder inputBuffer, string filePath, bool confirming = false, int cursorSlot = 0, int selectionLength = 1, bool[]? occupied = null, TimeBlock? selectedBlock = null, bool editing = false, bool showHelp = false, int inputCursor = 0, StringBuilder? ticketBuffer = null, int ticketCursor = 0, int activeField = 0)
     {
         // Timeline pane
         var consoleWidth = System.Console.WindowWidth;
@@ -598,7 +645,8 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                         ? $"{totalMinutes / 60}h"
                         : $"{totalMinutes / 60}h {totalMinutes % 60}m"
                     : $"{totalMinutes}m";
-                return (IRenderable)new Markup($"[{squareColor}]\u25a0[/] [bold]{sh:D2}:{sm:D2}\u2013{eh:D2}:{em:D2}[/] {escaped} [dim grey]{durationText}[/]");
+                var ticketDisplay = string.IsNullOrEmpty(b.Ticket) ? "" : $"[cyan]{Markup.Escape(b.Ticket)}[/] ";
+                return (IRenderable)new Markup($"[{squareColor}]\u25a0[/] [bold]{sh:D2}:{sm:D2}\u2013{eh:D2}:{em:D2}[/] {ticketDisplay}{escaped} [dim grey]{durationText}[/]");
             }).ToArray();
             messagesContent = new Rows(renderables);
         }
@@ -612,6 +660,7 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                 "[bold]← →[/]        Move cursor / Jump between blocks\n" +
                 "[bold]↑ ↓[/]        Resize selection\n" +
                 "[bold]Enter[/]      Log time entry\n" +
+                "[bold]Tab[/]        Switch input field\n" +
                 "[bold]Ctrl+E[/]     Edit selected entry\n" +
                 "[bold]Ctrl+D[/]     Delete selected entry\n" +
                 "[bold]Ctrl+Q, Q[/]  Quit\n" +
@@ -638,6 +687,7 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
         }
 
         // Input pane
+        var tb = ticketBuffer ?? new StringBuilder();
         if (confirming)
         {
             layout["Input"].Update(
@@ -647,32 +697,33 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
         }
         else if (selectedBlock != null && editing)
         {
-            var beforeCursor = Markup.Escape(inputBuffer.ToString()[..inputCursor]);
-            var cursorChar = inputCursor < inputBuffer.Length ? Markup.Escape(inputBuffer.ToString()[inputCursor].ToString()) : " ";
-            var afterCursor = inputCursor < inputBuffer.Length ? Markup.Escape(inputBuffer.ToString()[(inputCursor + 1)..]) : "";
+            var descLine = RenderFieldLine("Description", inputBuffer, inputCursor, activeField == 0);
+            var tickLine = RenderFieldLine("Ticket", tb, ticketCursor, activeField == 1);
             layout["Input"].Update(
-                new Panel(new Markup($"{beforeCursor}[invert]{cursorChar}[/]{afterCursor}"))
-                    .Header("Description [cyan](editing)[/]")
+                new Panel(new Rows(new Markup(descLine), new Markup(tickLine)))
+                    .Header("Input [cyan](editing)[/]")
                     .Expand()
                     .Border(BoxBorder.Rounded));
         }
         else if (selectedBlock != null)
         {
             var labelText = Markup.Escape(selectedBlock.Label);
+            var ticketText = Markup.Escape(selectedBlock.Ticket);
+            var descLine = $"[bold]Description:[/] {labelText}";
+            var tickLine = $"[bold]Ticket:[/]      {(string.IsNullOrEmpty(ticketText) ? "[dim]none[/]" : ticketText)}";
             layout["Input"].Update(
-                new Panel(new Markup(labelText))
-                    .Header("Description")
+                new Panel(new Rows(new Markup(descLine), new Markup(tickLine)))
+                    .Header("Input")
                     .Expand()
                     .Border(BoxBorder.Rounded));
         }
         else
         {
-            var beforeCursor = Markup.Escape(inputBuffer.ToString()[..inputCursor]);
-            var cursorChar = inputCursor < inputBuffer.Length ? Markup.Escape(inputBuffer.ToString()[inputCursor].ToString()) : " ";
-            var afterCursor = inputCursor < inputBuffer.Length ? Markup.Escape(inputBuffer.ToString()[(inputCursor + 1)..]) : "";
+            var descLine = RenderFieldLine("Description", inputBuffer, inputCursor, activeField == 0);
+            var tickLine = RenderFieldLine("Ticket", tb, ticketCursor, activeField == 1);
             layout["Input"].Update(
-                new Panel(new Markup($"{beforeCursor}[invert]{cursorChar}[/]{afterCursor}"))
-                    .Header("Description")
+                new Panel(new Rows(new Markup(descLine), new Markup(tickLine)))
+                    .Header("Input")
                     .Expand()
                     .Border(BoxBorder.Rounded));
         }
@@ -688,5 +739,24 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
         var padding = Math.Max(0, consoleWidth - statusLeftPlain.Length - statusRight.Length);
         var statusBar = $"[white on orangered1]  {Markup.Escape(filePath)}  [dim]?=help[/]{new string(' ', padding)}{Markup.Escape(statusRight)}[/]";
         layout["StatusBar"].Update(new Markup(statusBar));
+    }
+
+    private static string RenderFieldLine(string fieldName, StringBuilder buffer, int cursor, bool isActive)
+    {
+        var paddedName = fieldName.PadRight(11);
+        if (isActive)
+        {
+            var text = buffer.ToString();
+            var beforeCursor = Markup.Escape(text[..cursor]);
+            var cursorChar = cursor < text.Length ? Markup.Escape(text[cursor].ToString()) : " ";
+            var afterCursor = cursor < text.Length ? Markup.Escape(text[(cursor + 1)..]) : "";
+            return $"[bold]{Markup.Escape(paddedName)}:[/] {beforeCursor}[invert]{cursorChar}[/]{afterCursor}";
+        }
+        else
+        {
+            var escaped = Markup.Escape(buffer.ToString());
+            var display = string.IsNullOrEmpty(escaped) ? "[dim]empty[/]" : $"[dim]{escaped}[/]";
+            return $"[dim]{Markup.Escape(paddedName)}:[/] {display}";
+        }
     }
 }

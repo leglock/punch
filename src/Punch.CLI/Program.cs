@@ -177,6 +177,7 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
         TimeBlock? selectedBlock = null;
         var editing = false;
         var showHelp = false;
+        var logScrollOffset = 0;
 
         AnsiConsole.AlternateScreen(() =>
         {
@@ -191,7 +192,7 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
 
             AnsiConsole.Live(layout).Start(ctx =>
             {
-                UpdateLayout(layout, bookedBlocks, inputBuffer, filePath, cursorSlot: cursorSlot, selectionLength: selectionLength, occupied: occupied, selectedBlock: selectedBlock, editing: editing, showHelp: showHelp, inputCursor: inputCursor, ticketBuffer: ticketBuffer, ticketCursor: ticketCursor, activeField: activeField);
+                UpdateLayout(layout, bookedBlocks, inputBuffer, filePath, cursorSlot: cursorSlot, selectionLength: selectionLength, occupied: occupied, selectedBlock: selectedBlock, editing: editing, showHelp: showHelp, inputCursor: inputCursor, ticketBuffer: ticketBuffer, ticketCursor: ticketCursor, activeField: activeField, logScrollOffset: logScrollOffset);
                 ctx.Refresh();
 
                 var confirming = false;
@@ -206,7 +207,7 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                             break;
 
                         confirming = false;
-                        UpdateLayout(layout, bookedBlocks, inputBuffer, filePath, cursorSlot: cursorSlot, selectionLength: selectionLength, occupied: occupied, selectedBlock: selectedBlock, editing: editing, showHelp: showHelp, inputCursor: inputCursor, ticketBuffer: ticketBuffer, ticketCursor: ticketCursor, activeField: activeField);
+                        UpdateLayout(layout, bookedBlocks, inputBuffer, filePath, cursorSlot: cursorSlot, selectionLength: selectionLength, occupied: occupied, selectedBlock: selectedBlock, editing: editing, showHelp: showHelp, inputCursor: inputCursor, ticketBuffer: ticketBuffer, ticketCursor: ticketCursor, activeField: activeField, logScrollOffset: logScrollOffset);
                         ctx.Refresh();
                         continue;
                     }
@@ -214,7 +215,7 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                     if (key.Key == ConsoleKey.Q && key.Modifiers.HasFlag(ConsoleModifiers.Control))
                     {
                         confirming = true;
-                        UpdateLayout(layout, bookedBlocks, inputBuffer, filePath, confirming: true, cursorSlot: cursorSlot, selectionLength: selectionLength, occupied: occupied, selectedBlock: selectedBlock, editing: editing, showHelp: showHelp, inputCursor: inputCursor, ticketBuffer: ticketBuffer, ticketCursor: ticketCursor, activeField: activeField);
+                        UpdateLayout(layout, bookedBlocks, inputBuffer, filePath, confirming: true, cursorSlot: cursorSlot, selectionLength: selectionLength, occupied: occupied, selectedBlock: selectedBlock, editing: editing, showHelp: showHelp, inputCursor: inputCursor, ticketBuffer: ticketBuffer, ticketCursor: ticketCursor, activeField: activeField, logScrollOffset: logScrollOffset);
                         ctx.Refresh();
                         continue;
                     }
@@ -222,7 +223,7 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                     if (showHelp)
                     {
                         showHelp = false;
-                        UpdateLayout(layout, bookedBlocks, inputBuffer, filePath, cursorSlot: cursorSlot, selectionLength: selectionLength, occupied: occupied, selectedBlock: selectedBlock, editing: editing, showHelp: showHelp, inputCursor: inputCursor, ticketBuffer: ticketBuffer, ticketCursor: ticketCursor, activeField: activeField);
+                        UpdateLayout(layout, bookedBlocks, inputBuffer, filePath, cursorSlot: cursorSlot, selectionLength: selectionLength, occupied: occupied, selectedBlock: selectedBlock, editing: editing, showHelp: showHelp, inputCursor: inputCursor, ticketBuffer: ticketBuffer, ticketCursor: ticketCursor, activeField: activeField, logScrollOffset: logScrollOffset);
                         ctx.Refresh();
                         continue;
                     }
@@ -230,7 +231,7 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                     if (key.KeyChar == '?' && selectedBlock == null && !editing && inputBuffer.Length == 0 && ticketBuffer.Length == 0)
                     {
                         showHelp = !showHelp;
-                        UpdateLayout(layout, bookedBlocks, inputBuffer, filePath, cursorSlot: cursorSlot, selectionLength: selectionLength, occupied: occupied, selectedBlock: selectedBlock, editing: editing, showHelp: showHelp, inputCursor: inputCursor, ticketBuffer: ticketBuffer, ticketCursor: ticketCursor, activeField: activeField);
+                        UpdateLayout(layout, bookedBlocks, inputBuffer, filePath, cursorSlot: cursorSlot, selectionLength: selectionLength, occupied: occupied, selectedBlock: selectedBlock, editing: editing, showHelp: showHelp, inputCursor: inputCursor, ticketBuffer: ticketBuffer, ticketCursor: ticketCursor, activeField: activeField, logScrollOffset: logScrollOffset);
                         ctx.Refresh();
                         continue;
                     }
@@ -345,6 +346,15 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                     {
                         if (selectedBlock == null && selectionLength > 1)
                             selectionLength--;
+                    }
+                    else if (key.Key == ConsoleKey.PageUp)
+                    {
+                        logScrollOffset = Math.Max(0, logScrollOffset - 5);
+                    }
+                    else if (key.Key == ConsoleKey.PageDown)
+                    {
+                        var maxOffset = Math.Max(0, bookedBlocks.Count - 1);
+                        logScrollOffset = Math.Min(maxOffset, logScrollOffset + 5);
                     }
                     else if (key.Key == ConsoleKey.D && key.Modifiers.HasFlag(ConsoleModifiers.Control))
                     {
@@ -480,7 +490,28 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                     if (activeField == 0) inputCursor = currentCursor;
                     else ticketCursor = currentCursor;
 
-                    UpdateLayout(layout, bookedBlocks, inputBuffer, filePath, cursorSlot: cursorSlot, selectionLength: selectionLength, occupied: occupied, selectedBlock: selectedBlock, editing: editing, showHelp: showHelp, inputCursor: inputCursor, ticketBuffer: ticketBuffer, ticketCursor: ticketCursor, activeField: activeField);
+                    // Auto-scroll to keep selected block visible
+                    if (selectedBlock != null)
+                    {
+                        var sorted = bookedBlocks.OrderBy(b => b.StartSlot).ToList();
+                        var selIdx = sorted.FindIndex(b => b.StartSlot == selectedBlock.StartSlot && b.Length == selectedBlock.Length);
+                        if (selIdx >= 0)
+                        {
+                            var visHeight = Math.Max(1, (int)(System.Console.WindowHeight * 0.8) - 2);
+                            if (selIdx < logScrollOffset)
+                                logScrollOffset = selIdx;
+                            else if (selIdx >= logScrollOffset + visHeight)
+                                logScrollOffset = selIdx - visHeight + 1;
+                        }
+                    }
+
+                    // Clamp scroll offset after block additions/deletions
+                    var totalBlocks = bookedBlocks.Count;
+                    var viewHeight = Math.Max(1, (int)(System.Console.WindowHeight * 0.8) - 2);
+                    var maxOff = Math.Max(0, totalBlocks - viewHeight);
+                    logScrollOffset = Math.Clamp(logScrollOffset, 0, maxOff);
+
+                    UpdateLayout(layout, bookedBlocks, inputBuffer, filePath, cursorSlot: cursorSlot, selectionLength: selectionLength, occupied: occupied, selectedBlock: selectedBlock, editing: editing, showHelp: showHelp, inputCursor: inputCursor, ticketBuffer: ticketBuffer, ticketCursor: ticketCursor, activeField: activeField, logScrollOffset: logScrollOffset);
                     ctx.Refresh();
                 }
             });
@@ -502,7 +533,7 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
         return false;
     }
 
-    private static void UpdateLayout(Layout layout, List<TimeBlock> bookedBlocks, StringBuilder inputBuffer, string filePath, bool confirming = false, int cursorSlot = 0, int selectionLength = 1, bool[]? occupied = null, TimeBlock? selectedBlock = null, bool editing = false, bool showHelp = false, int inputCursor = 0, StringBuilder? ticketBuffer = null, int ticketCursor = 0, int activeField = 0)
+    private static void UpdateLayout(Layout layout, List<TimeBlock> bookedBlocks, StringBuilder inputBuffer, string filePath, bool confirming = false, int cursorSlot = 0, int selectionLength = 1, bool[]? occupied = null, TimeBlock? selectedBlock = null, bool editing = false, bool showHelp = false, int inputCursor = 0, StringBuilder? ticketBuffer = null, int ticketCursor = 0, int activeField = 0, int logScrollOffset = 0)
     {
         // Timeline pane
         var consoleWidth = System.Console.WindowWidth;
@@ -613,13 +644,21 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                 .Expand()
                 .Border(BoxBorder.Rounded));
 
-        // Messages pane: show booked blocks sorted chronologically
+        // Messages pane: show booked blocks sorted chronologically with scrolling
         var consoleHeight = System.Console.WindowHeight;
         var messagesHeight = Math.Max(1, (int)(consoleHeight * 0.8) - 2); // account for panel border
         var sortedBlocks = bookedBlocks.OrderBy(b => b.StartSlot).ToList();
+
+        // Clamp scroll offset to valid range
+        var maxScrollOffset = Math.Max(0, sortedBlocks.Count - messagesHeight);
+        var clampedOffset = Math.Clamp(logScrollOffset, 0, maxScrollOffset);
+
         var visibleBlocks = sortedBlocks.Count > messagesHeight
-            ? sortedBlocks.Skip(sortedBlocks.Count - messagesHeight).ToList()
+            ? sortedBlocks.Skip(clampedOffset).Take(messagesHeight).ToList()
             : sortedBlocks;
+
+        var hasMoreAbove = clampedOffset > 0;
+        var hasMoreBelow = clampedOffset + messagesHeight < sortedBlocks.Count;
 
         IRenderable messagesContent;
         if (visibleBlocks.Count == 0)
@@ -628,7 +667,10 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
         }
         else
         {
-            var renderables = visibleBlocks.Select(b =>
+            var renderables = new List<IRenderable>();
+            if (hasMoreAbove)
+                renderables.Add(new Markup($"[dim]  \u25b2 {clampedOffset} more above (PgUp)[/]"));
+            foreach (var b in visibleBlocks)
             {
                 var sh = b.StartSlot / 4;
                 var sm = (b.StartSlot % 4) * 15;
@@ -646,8 +688,13 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                         : $"{totalMinutes / 60}h {totalMinutes % 60}m"
                     : $"{totalMinutes}m";
                 var ticketDisplay = string.IsNullOrEmpty(b.Ticket) ? "" : $"[cyan]{Markup.Escape(b.Ticket)}[/] ";
-                return (IRenderable)new Markup($"[{squareColor}]\u25a0[/] [bold]{sh:D2}:{sm:D2}\u2013{eh:D2}:{em:D2}[/] {ticketDisplay}{escaped} [dim grey]{durationText}[/]");
-            }).ToArray();
+                renderables.Add(new Markup($"[{squareColor}]\u25a0[/] [bold]{sh:D2}:{sm:D2}\u2013{eh:D2}:{em:D2}[/] {ticketDisplay}{escaped} [dim grey]{durationText}[/]"));
+            }
+            if (hasMoreBelow)
+            {
+                var belowCount = sortedBlocks.Count - clampedOffset - messagesHeight;
+                renderables.Add(new Markup($"[dim]  \u25bc {belowCount} more below (PgDn)[/]"));
+            }
             messagesContent = new Rows(renderables);
         }
 
@@ -659,6 +706,7 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
             var helpText = new Markup(
                 "[bold]Left/Right[/]  Move cursor / Jump between blocks\n" +
                 "[bold]Up/Down[/]     Resize selection\n" +
+                "[bold]PgUp/PgDn[/]  Scroll time log\n" +
                 "[bold]Enter[/]       Log time entry\n" +
                 "[bold]Tab[/]         Switch input field\n" +
                 "[bold]Ctrl+E[/]      Edit selected entry\n" +

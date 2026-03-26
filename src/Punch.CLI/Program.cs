@@ -657,14 +657,14 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                 .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "0.0.0";
             var titleLine = new Markup($"[bold][red]p[/][orangered1]u[/][darkorange]n[/][orange3]c[/][orange1]h[/][/] [dim]v{Markup.Escape(version)}[/]");
             var helpText = new Markup(
-                "[bold]← →[/]        Move cursor / Jump between blocks\n" +
-                "[bold]↑ ↓[/]        Resize selection\n" +
-                "[bold]Enter[/]      Log time entry\n" +
-                "[bold]Tab[/]        Switch input field\n" +
-                "[bold]Ctrl+E[/]     Edit selected entry\n" +
-                "[bold]Ctrl+D[/]     Delete selected entry\n" +
-                "[bold]Ctrl+Q, Q[/]  Quit\n" +
-                "[bold]?[/]          Toggle this help");
+                "[bold]Left/Right[/]  Move cursor / Jump between blocks\n" +
+                "[bold]Up/Down[/]     Resize selection\n" +
+                "[bold]Enter[/]       Log time entry\n" +
+                "[bold]Tab[/]         Switch input field\n" +
+                "[bold]Ctrl+E[/]      Edit selected entry\n" +
+                "[bold]Ctrl+D[/]      Delete selected entry\n" +
+                "[bold]Ctrl+Q, Q[/]   Quit\n" +
+                "[bold]?[/]           Toggle this help");
             var helpContent = new Rows(
                 Align.Center(titleLine),
                 new Text(" "),

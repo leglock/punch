@@ -659,12 +659,12 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
             var helpText = new Markup(
                 "[bold]Left/Right[/]  Move cursor / Jump between blocks\n" +
                 "[bold]Up/Down[/]     Resize selection\n" +
-                "[bold]Enter[/]      Log time entry\n" +
-                "[bold]Tab[/]        Switch input field\n" +
-                "[bold]Ctrl+E[/]     Edit selected entry\n" +
-                "[bold]Ctrl+D[/]     Delete selected entry\n" +
-                "[bold]Ctrl+Q, Q[/]  Quit\n" +
-                "[bold]?[/]          Toggle this help");
+                "[bold]Enter[/]       Log time entry\n" +
+                "[bold]Tab[/]         Switch input field\n" +
+                "[bold]Ctrl+E[/]      Edit selected entry\n" +
+                "[bold]Ctrl+D[/]      Delete selected entry\n" +
+                "[bold]Ctrl+Q, Q[/]   Quit\n" +
+                "[bold]?[/]           Toggle this help");
             var helpContent = new Rows(
                 Align.Center(titleLine),
                 new Text(" "),

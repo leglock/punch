@@ -48,6 +48,17 @@ internal sealed class TimeBlockDto
     public string Ticket { get; set; } = "";
 }
 
+internal sealed class TicketEntry
+{
+    public string Key { get; set; } = "";
+    public string Title { get; set; } = "";
+}
+
+internal sealed class TicketsConfig
+{
+    public List<TicketEntry> Tickets { get; set; } = new();
+}
+
 internal static class PunchStorage
 {
     public static string GetDataDirectory()
@@ -126,6 +137,29 @@ internal static class PunchStorage
         var json = JsonSerializer.Serialize(data, new JsonSerializerOptions { WriteIndented = true });
         File.WriteAllText(GetFilePath(date), json);
     }
+
+    public static string GetTicketsFilePath()
+    {
+        return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".punch", "tickets.json");
+    }
+
+    public static List<TicketEntry> LoadTickets()
+    {
+        var path = GetTicketsFilePath();
+        if (!File.Exists(path))
+            return new List<TicketEntry>();
+
+        try
+        {
+            var json = File.ReadAllText(path);
+            var config = JsonSerializer.Deserialize<TicketsConfig>(json);
+            return config?.Tickets ?? new List<TicketEntry>();
+        }
+        catch
+        {
+            return new List<TicketEntry>();
+        }
+    }
 }
 
 internal sealed class PunchCommand : Command<PunchCommandSettings>
@@ -177,6 +211,9 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
         TimeBlock? selectedBlock = null;
         var editing = false;
         var showHelp = false;
+        var showTicketBrowser = false;
+        var selectedTicketIndex = 0;
+        var ticketList = PunchStorage.LoadTickets();
 
         AnsiConsole.AlternateScreen(() =>
         {
@@ -191,7 +228,7 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
 
             AnsiConsole.Live(layout).Start(ctx =>
             {
-                UpdateLayout(layout, bookedBlocks, inputBuffer, filePath, cursorSlot: cursorSlot, selectionLength: selectionLength, occupied: occupied, selectedBlock: selectedBlock, editing: editing, showHelp: showHelp, inputCursor: inputCursor, ticketBuffer: ticketBuffer, ticketCursor: ticketCursor, activeField: activeField);
+                UpdateLayout(layout, bookedBlocks, inputBuffer, filePath, cursorSlot: cursorSlot, selectionLength: selectionLength, occupied: occupied, selectedBlock: selectedBlock, editing: editing, showHelp: showHelp, inputCursor: inputCursor, ticketBuffer: ticketBuffer, ticketCursor: ticketCursor, activeField: activeField, showTicketBrowser: showTicketBrowser, selectedTicketIndex: selectedTicketIndex, ticketList: ticketList);
                 ctx.Refresh();
 
                 var confirming = false;
@@ -206,7 +243,7 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                             break;
 
                         confirming = false;
-                        UpdateLayout(layout, bookedBlocks, inputBuffer, filePath, cursorSlot: cursorSlot, selectionLength: selectionLength, occupied: occupied, selectedBlock: selectedBlock, editing: editing, showHelp: showHelp, inputCursor: inputCursor, ticketBuffer: ticketBuffer, ticketCursor: ticketCursor, activeField: activeField);
+                        UpdateLayout(layout, bookedBlocks, inputBuffer, filePath, cursorSlot: cursorSlot, selectionLength: selectionLength, occupied: occupied, selectedBlock: selectedBlock, editing: editing, showHelp: showHelp, inputCursor: inputCursor, ticketBuffer: ticketBuffer, ticketCursor: ticketCursor, activeField: activeField, showTicketBrowser: showTicketBrowser, selectedTicketIndex: selectedTicketIndex, ticketList: ticketList);
                         ctx.Refresh();
                         continue;
                     }
@@ -214,7 +251,7 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                     if (key.Key == ConsoleKey.Q && key.Modifiers.HasFlag(ConsoleModifiers.Control))
                     {
                         confirming = true;
-                        UpdateLayout(layout, bookedBlocks, inputBuffer, filePath, confirming: true, cursorSlot: cursorSlot, selectionLength: selectionLength, occupied: occupied, selectedBlock: selectedBlock, editing: editing, showHelp: showHelp, inputCursor: inputCursor, ticketBuffer: ticketBuffer, ticketCursor: ticketCursor, activeField: activeField);
+                        UpdateLayout(layout, bookedBlocks, inputBuffer, filePath, confirming: true, cursorSlot: cursorSlot, selectionLength: selectionLength, occupied: occupied, selectedBlock: selectedBlock, editing: editing, showHelp: showHelp, inputCursor: inputCursor, ticketBuffer: ticketBuffer, ticketCursor: ticketCursor, activeField: activeField, showTicketBrowser: showTicketBrowser, selectedTicketIndex: selectedTicketIndex, ticketList: ticketList);
                         ctx.Refresh();
                         continue;
                     }
@@ -222,7 +259,7 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                     if (showHelp)
                     {
                         showHelp = false;
-                        UpdateLayout(layout, bookedBlocks, inputBuffer, filePath, cursorSlot: cursorSlot, selectionLength: selectionLength, occupied: occupied, selectedBlock: selectedBlock, editing: editing, showHelp: showHelp, inputCursor: inputCursor, ticketBuffer: ticketBuffer, ticketCursor: ticketCursor, activeField: activeField);
+                        UpdateLayout(layout, bookedBlocks, inputBuffer, filePath, cursorSlot: cursorSlot, selectionLength: selectionLength, occupied: occupied, selectedBlock: selectedBlock, editing: editing, showHelp: showHelp, inputCursor: inputCursor, ticketBuffer: ticketBuffer, ticketCursor: ticketCursor, activeField: activeField, showTicketBrowser: showTicketBrowser, selectedTicketIndex: selectedTicketIndex, ticketList: ticketList);
                         ctx.Refresh();
                         continue;
                     }
@@ -230,7 +267,43 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                     if (key.KeyChar == '?' && selectedBlock == null && !editing && inputBuffer.Length == 0 && ticketBuffer.Length == 0)
                     {
                         showHelp = !showHelp;
-                        UpdateLayout(layout, bookedBlocks, inputBuffer, filePath, cursorSlot: cursorSlot, selectionLength: selectionLength, occupied: occupied, selectedBlock: selectedBlock, editing: editing, showHelp: showHelp, inputCursor: inputCursor, ticketBuffer: ticketBuffer, ticketCursor: ticketCursor, activeField: activeField);
+                        UpdateLayout(layout, bookedBlocks, inputBuffer, filePath, cursorSlot: cursorSlot, selectionLength: selectionLength, occupied: occupied, selectedBlock: selectedBlock, editing: editing, showHelp: showHelp, inputCursor: inputCursor, ticketBuffer: ticketBuffer, ticketCursor: ticketCursor, activeField: activeField, showTicketBrowser: showTicketBrowser, selectedTicketIndex: selectedTicketIndex, ticketList: ticketList);
+                        ctx.Refresh();
+                        continue;
+                    }
+
+                    if (showTicketBrowser)
+                    {
+                        if (key.Key == ConsoleKey.Escape || key.Key == ConsoleKey.F2)
+                        {
+                            showTicketBrowser = false;
+                        }
+                        else if (key.Key == ConsoleKey.UpArrow)
+                        {
+                            if (selectedTicketIndex > 0) selectedTicketIndex--;
+                        }
+                        else if (key.Key == ConsoleKey.DownArrow)
+                        {
+                            if (selectedTicketIndex < ticketList.Count - 1) selectedTicketIndex++;
+                        }
+                        else if (key.Key == ConsoleKey.Enter && ticketList.Count > 0)
+                        {
+                            var selected = ticketList[selectedTicketIndex];
+                            ticketBuffer.Clear();
+                            ticketBuffer.Append(selected.Key);
+                            ticketCursor = ticketBuffer.Length;
+                            showTicketBrowser = false;
+                        }
+                        UpdateLayout(layout, bookedBlocks, inputBuffer, filePath, cursorSlot: cursorSlot, selectionLength: selectionLength, occupied: occupied, selectedBlock: selectedBlock, editing: editing, showHelp: showHelp, inputCursor: inputCursor, ticketBuffer: ticketBuffer, ticketCursor: ticketCursor, activeField: activeField, showTicketBrowser: showTicketBrowser, selectedTicketIndex: selectedTicketIndex, ticketList: ticketList);
+                        ctx.Refresh();
+                        continue;
+                    }
+
+                    if (key.Key == ConsoleKey.F2 && activeField == 1)
+                    {
+                        showTicketBrowser = true;
+                        selectedTicketIndex = 0;
+                        UpdateLayout(layout, bookedBlocks, inputBuffer, filePath, cursorSlot: cursorSlot, selectionLength: selectionLength, occupied: occupied, selectedBlock: selectedBlock, editing: editing, showHelp: showHelp, inputCursor: inputCursor, ticketBuffer: ticketBuffer, ticketCursor: ticketCursor, activeField: activeField, showTicketBrowser: showTicketBrowser, selectedTicketIndex: selectedTicketIndex, ticketList: ticketList);
                         ctx.Refresh();
                         continue;
                     }
@@ -480,7 +553,7 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                     if (activeField == 0) inputCursor = currentCursor;
                     else ticketCursor = currentCursor;
 
-                    UpdateLayout(layout, bookedBlocks, inputBuffer, filePath, cursorSlot: cursorSlot, selectionLength: selectionLength, occupied: occupied, selectedBlock: selectedBlock, editing: editing, showHelp: showHelp, inputCursor: inputCursor, ticketBuffer: ticketBuffer, ticketCursor: ticketCursor, activeField: activeField);
+                    UpdateLayout(layout, bookedBlocks, inputBuffer, filePath, cursorSlot: cursorSlot, selectionLength: selectionLength, occupied: occupied, selectedBlock: selectedBlock, editing: editing, showHelp: showHelp, inputCursor: inputCursor, ticketBuffer: ticketBuffer, ticketCursor: ticketCursor, activeField: activeField, showTicketBrowser: showTicketBrowser, selectedTicketIndex: selectedTicketIndex, ticketList: ticketList);
                     ctx.Refresh();
                 }
             });
@@ -502,7 +575,7 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
         return false;
     }
 
-    private static void UpdateLayout(Layout layout, List<TimeBlock> bookedBlocks, StringBuilder inputBuffer, string filePath, bool confirming = false, int cursorSlot = 0, int selectionLength = 1, bool[]? occupied = null, TimeBlock? selectedBlock = null, bool editing = false, bool showHelp = false, int inputCursor = 0, StringBuilder? ticketBuffer = null, int ticketCursor = 0, int activeField = 0)
+    private static void UpdateLayout(Layout layout, List<TimeBlock> bookedBlocks, StringBuilder inputBuffer, string filePath, bool confirming = false, int cursorSlot = 0, int selectionLength = 1, bool[]? occupied = null, TimeBlock? selectedBlock = null, bool editing = false, bool showHelp = false, int inputCursor = 0, StringBuilder? ticketBuffer = null, int ticketCursor = 0, int activeField = 0, bool showTicketBrowser = false, int selectedTicketIndex = 0, List<TicketEntry>? ticketList = null)
     {
         // Timeline pane
         var consoleWidth = System.Console.WindowWidth;
@@ -661,6 +734,7 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                 "[bold]Up/Down[/]     Resize selection\n" +
                 "[bold]Enter[/]       Log time entry\n" +
                 "[bold]Tab[/]         Switch input field\n" +
+                "[bold]F2[/]          Browse tickets (in Ticket field)\n" +
                 "[bold]Ctrl+E[/]      Edit selected entry\n" +
                 "[bold]Ctrl+D[/]      Delete selected entry\n" +
                 "[bold]Ctrl+Q, Q[/]   Quit\n" +
@@ -674,6 +748,61 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                 .Expand();
             layout["Messages"].Update(
                 new Panel(Align.Center(helpPanel, VerticalAlignment.Middle))
+                    .Expand()
+                    .NoBorder());
+        }
+        else if (showTicketBrowser)
+        {
+            var tickets = ticketList ?? new List<TicketEntry>();
+            IRenderable browserContent;
+            if (tickets.Count == 0)
+            {
+                var configPath = PunchStorage.GetTicketsFilePath();
+                var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+                var displayPath = configPath.StartsWith(home) ? "~" + configPath[home.Length..] : configPath;
+                browserContent = new Markup(
+                    $"[dim]No tickets configured.[/]\n\n" +
+                    $"Create [bold]{Markup.Escape(displayPath)}[/] with:\n\n" +
+                    "[dim]{\n" +
+                    "  \"Tickets\": [\n" +
+                    "    { \"Key\": \"PROJ-123\", \"Title\": \"My ticket\" }\n" +
+                    "  ]\n" +
+                    "}[/]");
+            }
+            else
+            {
+                var visibleHeight = Math.Max(1, messagesHeight - 2);
+                var scrollStart = 0;
+                if (tickets.Count > visibleHeight)
+                {
+                    scrollStart = Math.Max(0, selectedTicketIndex - visibleHeight / 2);
+                    scrollStart = Math.Min(scrollStart, tickets.Count - visibleHeight);
+                }
+                var visibleEnd = Math.Min(scrollStart + visibleHeight, tickets.Count);
+
+                var lines = new List<IRenderable>();
+                if (scrollStart > 0)
+                    lines.Add(new Markup($"[dim]\u2191 {scrollStart} more[/]"));
+                for (var i = scrollStart; i < visibleEnd; i++)
+                {
+                    var t = tickets[i];
+                    var key = Markup.Escape(t.Key);
+                    var title = Markup.Escape(t.Title);
+                    if (i == selectedTicketIndex)
+                        lines.Add(new Markup($"[invert] [cyan]{key}[/] {title} [/]"));
+                    else
+                        lines.Add(new Markup($"  [cyan]{key}[/] [dim]{title}[/]"));
+                }
+                if (visibleEnd < tickets.Count)
+                    lines.Add(new Markup($"[dim]\u2193 {tickets.Count - visibleEnd} more[/]"));
+                browserContent = new Rows(lines);
+            }
+            var browserPanel = new Panel(browserContent)
+                .Header("Tickets [dim](F2/Esc to close, Enter to select)[/]")
+                .Border(BoxBorder.Rounded)
+                .Expand();
+            layout["Messages"].Update(
+                new Panel(Align.Center(browserPanel, VerticalAlignment.Middle))
                     .Expand()
                     .NoBorder());
         }
@@ -734,10 +863,11 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
         var totalMins = totalMinutesAll % 60;
         var totalFormatted = totalMins > 0 ? $"{totalHours}h {totalMins}m" : $"{totalHours}h 0m";
         var percent = totalMinutesAll * 100 / 480;
-        var statusLeftPlain = $"  {filePath}  ?=help";
+        var helpHint = activeField == 1 ? "?=help F2=tickets" : "?=help";
+        var statusLeftPlain = $"  {filePath}  {helpHint}";
         var statusRight = $"{totalFormatted}    {percent}% of 8h  ";
         var padding = Math.Max(0, consoleWidth - statusLeftPlain.Length - statusRight.Length);
-        var statusBar = $"[white on orangered1]  {Markup.Escape(filePath)}  [dim]?=help[/]{new string(' ', padding)}{Markup.Escape(statusRight)}[/]";
+        var statusBar = $"[white on orangered1]  {Markup.Escape(filePath)}  [dim]{Markup.Escape(helpHint)}[/]{new string(' ', padding)}{Markup.Escape(statusRight)}[/]";
         layout["StatusBar"].Update(new Markup(statusBar));
     }
 

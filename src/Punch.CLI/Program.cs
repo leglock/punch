@@ -497,7 +497,8 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                         var selIdx = sorted.FindIndex(b => b.StartSlot == selectedBlock.StartSlot && b.Length == selectedBlock.Length);
                         if (selIdx >= 0)
                         {
-                            var visHeight = Math.Max(1, (int)(System.Console.WindowHeight * 0.8) - 2);
+                            // When scrolled, "above" indicator takes 1 line
+                            var visHeight = Math.Max(1, System.Console.WindowHeight - 10 - 2 - 1);
                             if (selIdx < logScrollOffset)
                                 logScrollOffset = selIdx;
                             else if (selIdx >= logScrollOffset + visHeight)
@@ -506,9 +507,11 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                     }
 
                     // Clamp scroll offset after block additions/deletions
+                    // When scrolled down, the "▲ more above" indicator takes 1 line,
+                    // so only viewHeight-1 block rows are visible at the bottom.
                     var totalBlocks = bookedBlocks.Count;
-                    var viewHeight = Math.Max(1, (int)(System.Console.WindowHeight * 0.8) - 2);
-                    var maxOff = Math.Max(0, totalBlocks - viewHeight);
+                    var viewHeight = Math.Max(1, System.Console.WindowHeight - 10 - 2);
+                    var maxOff = Math.Max(0, totalBlocks - (viewHeight - 1));
                     logScrollOffset = Math.Clamp(logScrollOffset, 0, maxOff);
 
                     UpdateLayout(layout, bookedBlocks, inputBuffer, filePath, cursorSlot: cursorSlot, selectionLength: selectionLength, occupied: occupied, selectedBlock: selectedBlock, editing: editing, showHelp: showHelp, inputCursor: inputCursor, ticketBuffer: ticketBuffer, ticketCursor: ticketCursor, activeField: activeField, logScrollOffset: logScrollOffset);
@@ -646,19 +649,28 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
 
         // Messages pane: show booked blocks sorted chronologically with scrolling
         var consoleHeight = System.Console.WindowHeight;
-        var messagesHeight = Math.Max(1, (int)(consoleHeight * 0.8) - 2); // account for panel border
+        var messagesHeight = Math.Max(1, consoleHeight - 10 - 2); // 10 = fixed panes (5+4+1), 2 = panel border
         var sortedBlocks = bookedBlocks.OrderBy(b => b.StartSlot).ToList();
 
-        // Clamp scroll offset to valid range
-        var maxScrollOffset = Math.Max(0, sortedBlocks.Count - messagesHeight);
-        var clampedOffset = Math.Clamp(logScrollOffset, 0, maxScrollOffset);
-
-        var visibleBlocks = sortedBlocks.Count > messagesHeight
-            ? sortedBlocks.Skip(clampedOffset).Take(messagesHeight).ToList()
-            : sortedBlocks;
+        // Clamp scroll offset to valid range and reserve lines for scroll indicators
+        var availableLines = messagesHeight;
+        var clampedOffset = Math.Clamp(logScrollOffset, 0, Math.Max(0, sortedBlocks.Count - 1));
 
         var hasMoreAbove = clampedOffset > 0;
-        var hasMoreBelow = clampedOffset + messagesHeight < sortedBlocks.Count;
+        if (hasMoreAbove) availableLines--;
+
+        var hasMoreBelow = clampedOffset + availableLines < sortedBlocks.Count;
+        if (hasMoreBelow) availableLines--;
+
+        availableLines = Math.Max(1, availableLines);
+        // Re-clamp offset so we don't scroll past the end
+        var maxScrollOffset = Math.Max(0, sortedBlocks.Count - availableLines);
+        clampedOffset = Math.Min(clampedOffset, maxScrollOffset);
+        // Recalculate indicators after clamping
+        hasMoreAbove = clampedOffset > 0;
+        hasMoreBelow = clampedOffset + availableLines < sortedBlocks.Count;
+
+        var visibleBlocks = sortedBlocks.Skip(clampedOffset).Take(availableLines).ToList();
 
         IRenderable messagesContent;
         if (visibleBlocks.Count == 0)
@@ -692,7 +704,7 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
             }
             if (hasMoreBelow)
             {
-                var belowCount = sortedBlocks.Count - clampedOffset - messagesHeight;
+                var belowCount = sortedBlocks.Count - clampedOffset - availableLines;
                 renderables.Add(new Markup($"[dim]  \u25bc {belowCount} more below (PgDn)[/]"));
             }
             messagesContent = new Rows(renderables);

@@ -784,7 +784,7 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
             var totalH = totalMinutesSummary / 60;
             var totalM = totalMinutesSummary % 60;
             var totalDur = totalM > 0 ? $"{totalH}h {totalM}m" : $"{totalH}h 0m";
-            summaryLines.Add(new Text(" "));
+            summaryLines.Add(new Markup($"  [dim]{new string('─', 28)}[/]"));
             summaryLines.Add(new Markup($"  [bold]{"Total".PadRight(20)} {totalDur}[/]"));
 
             var summaryPanel = new Panel(new Rows(summaryLines))

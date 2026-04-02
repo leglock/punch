@@ -774,8 +774,10 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                 var dur = mins >= 60
                     ? mins % 60 == 0 ? $"{mins / 60}h" : $"{mins / 60}h {mins % 60}m"
                     : $"{mins}m";
-                var ticketLabel = g.Ticket == "" ? "[dim]Other[/]" : $"[cyan]{Markup.Escape(g.Ticket)}[/]";
-                summaryLines.Add(new Markup($"  {ticketLabel,-30} {dur}"));
+                var visibleName = g.Ticket == "" ? "Other" : g.Ticket;
+                var paddedName = visibleName.PadRight(20);
+                var ticketLabel = g.Ticket == "" ? $"[dim]{paddedName}[/]" : $"[cyan]{Markup.Escape(paddedName)}[/]";
+                summaryLines.Add(new Markup($"  {ticketLabel} {dur}"));
             }
 
             var totalMinutesSummary = bookedBlocks.Sum(b => b.Length * 15);
@@ -783,7 +785,7 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
             var totalM = totalMinutesSummary % 60;
             var totalDur = totalM > 0 ? $"{totalH}h {totalM}m" : $"{totalH}h 0m";
             summaryLines.Add(new Text(" "));
-            summaryLines.Add(new Markup($"  [bold]{"Total",-30} {totalDur}[/]"));
+            summaryLines.Add(new Markup($"  [bold]{"Total".PadRight(20)} {totalDur}[/]"));
 
             var summaryPanel = new Panel(new Rows(summaryLines))
                 .Header("Ticket Summary")

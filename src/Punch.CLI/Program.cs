@@ -33,7 +33,10 @@ internal sealed class PunchCommandSettings : CommandSettings
     public string? Date { get; set; }
 }
 
-internal sealed record TimeBlock(int StartSlot, int Length, string Label, string Ticket = "");
+internal sealed record TimeBlock(int StartSlot, int Length, string Label, string Ticket = "")
+{
+    public bool IsLunch => Label.Contains("lunch", StringComparison.OrdinalIgnoreCase);
+}
 
 internal sealed class PunchData
 {
@@ -637,7 +640,9 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                 currentBlockIndex = pixelBlockIndex[i];
                 barMarkup.Append(currentState switch
                 {
-                    1 => currentBlockIndex % 2 == 0 ? "[orangered1]" : "[orange3]",
+                    1 => currentBlockIndex >= 0 && currentBlockIndex < bookedBlocks.Count && bookedBlocks[currentBlockIndex].IsLunch
+                            ? "[grey50]"
+                            : currentBlockIndex % 2 == 0 ? "[orangered1]" : "[orange3]",
                     2 => "[bold yellow]",
                     3 => "[bold white]",
                     _ => "[dim]"
@@ -712,7 +717,11 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                 var escaped = Markup.Escape(b.Label);
                 var isSelected = selectedBlock != null && b.StartSlot == selectedBlock.StartSlot && b.Length == selectedBlock.Length;
                 var blockIdx = bookedBlocks.IndexOf(b);
-                var squareColor = isSelected ? "white" : blockIdx % 2 == 0 ? "orangered1" : "orange3";
+                var squareColor = isSelected
+                    ? "white"
+                    : b.IsLunch
+                        ? "grey50"
+                        : blockIdx % 2 == 0 ? "orangered1" : "orange3";
                 var totalMinutes = b.Length * 15;
                 var durationText = totalMinutes >= 60
                     ? totalMinutes % 60 == 0
@@ -848,7 +857,7 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
         }
 
         // Status bar
-        var totalMinutesAll = bookedBlocks.Sum(b => b.Length * 15);
+        var totalMinutesAll = bookedBlocks.Where(b => !b.IsLunch).Sum(b => b.Length * 15);
         var totalHours = totalMinutesAll / 60;
         var totalMins = totalMinutesAll % 60;
         var totalFormatted = totalMins > 0 ? $"{totalHours}h {totalMins}m" : $"{totalHours}h 0m";

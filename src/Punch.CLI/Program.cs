@@ -53,8 +53,12 @@ internal sealed class TimeBlockDto
 
 internal static class PunchStorage
 {
+    internal static string? DataDirectoryOverride { get; set; }
+
     public static string GetDataDirectory()
     {
+        if (!string.IsNullOrEmpty(DataDirectoryOverride))
+            return DataDirectoryOverride;
         return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".punch", "data");
     }
 

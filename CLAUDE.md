@@ -9,20 +9,22 @@ Punch is a TUI time tracker for your workday. Log, label, and export your hours 
 ## Build & Run Commands
 
 ```bash
-dotnet build                                    # Build the solution
-dotnet test                                     # Run all tests (no test project yet)
-dotnet run --project src/Punch.CLI              # Run the app
-dotnet run --project src/Punch.CLI -- --version # Show version
+dotnet build                                              # Build the solution
+dotnet test                                               # Run all tests
+dotnet test --filter "FullyQualifiedName~PunchStorage"    # Run tests matching a name
+dotnet run --project src/Punch.CLI                        # Run the app
+dotnet run --project src/Punch.CLI -- --version           # Show version
+dotnet run --project src/Punch.CLI -- --date 2026-05-04   # Open a specific date
 ```
 
 ## Architecture
 
-Single-project .NET 10 console app using Spectre.Console.Cli for command parsing and TUI rendering. All types live in `Program.cs`.
+Two-project .NET 10 solution (`Punch.slnx`): the `Punch.CLI` console app (Spectre.Console.Cli for command parsing and TUI rendering) and `Punch.CLI.Tests` (xUnit). All app types live in a single `Program.cs`. The CLI project exposes its internals to the test project via `<InternalsVisibleTo Include="Punch.CLI.Tests" />` — tests reference `PunchStorage`, `TimeBlock`, etc. directly.
 
 - **`PunchCommand`** — default command; renders a full-screen alternate buffer TUI with timeline, entry list, input, and status bar via `AnsiConsole.Live`. The `Execute` method contains the entire TUI event loop — keyboard input is processed in a `while(true)` loop with `Console.ReadKey`, mutating local state variables and calling `UpdateLayout` after each keypress.
 - **`PunchCommandSettings`** — CLI options: `--version`/`-v`, `--date`/`-d` (yyyy-MM-dd override).
-- **`TimeBlock`** — immutable record representing a booked time slot (StartSlot, Length, Label, Ticket). Slots are 0–95 (96 quarter-hours in a day). Ticket is optional (defaults to `""`).
-- **`PunchStorage`** — static helper for JSON persistence. One file per day at `~/.punch/data/yyyy-MM-dd.json`. Auto-saves on every add, edit, and delete. Validates blocks on load (skips invalid/overlapping).
+- **`TimeBlock`** — immutable record representing a booked time slot (StartSlot, Length, Label, Ticket). Slots are 0–95 (96 quarter-hours in a day). Ticket is optional (defaults to `""`). The `IsLunch` computed property (case-insensitive "lunch" substring match on Label) is used to exclude lunch blocks from the workday total.
+- **`PunchStorage`** — static helper for JSON persistence. One file per day at `~/.punch/data/yyyy-MM-dd.json` (override via `DataDirectoryOverride` — used by tests to isolate to a temp dir). Auto-saves on every add, edit, and delete. Validates blocks on load (skips invalid ranges and overlaps).
 - **`PunchData` / `TimeBlockDto`** — JSON serialization DTOs.
 
 ### TUI State Model

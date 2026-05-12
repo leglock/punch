@@ -114,6 +114,23 @@ public class PunchStorageTests : IDisposable
     }
 
     [Fact]
+    public void SaveThenLoad_PreservesResizedLength()
+    {
+        var date = new DateOnly(2026, 5, 4);
+        var original = new TimeBlock(32, 4, "Standup", "ABC-1");
+        PunchStorage.Save(date, new List<TimeBlock> { original });
+
+        var resized = original with { Length = 6 };
+        PunchStorage.Save(date, new List<TimeBlock> { resized });
+
+        var loaded = PunchStorage.Load(date);
+        var only = Assert.Single(loaded);
+        Assert.Equal(6, only.Length);
+        Assert.Equal(32, only.StartSlot);
+        Assert.Equal("Standup", only.Label);
+    }
+
+    [Fact]
     public void Save_CreatesDataDirectoryWhenMissing()
     {
         var nestedDir = Path.Combine(_tempDir, "nested", "subdir");

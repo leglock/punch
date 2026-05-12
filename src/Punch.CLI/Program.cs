@@ -278,6 +278,13 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                     }
                     else if (key.Key == ConsoleKey.LeftArrow)
                     {
+                        // If abandoning an edit, restore the block's original slots in occupied[]
+                        // (they were freed on Ctrl+E to allow live resize).
+                        if (editing && selectedBlock != null)
+                        {
+                            for (var s = selectedBlock.StartSlot; s < selectedBlock.StartSlot + selectedBlock.Length; s++)
+                                occupied[s] = true;
+                        }
                         if (selectedBlock != null)
                         {
                             // On an existing block: jump to slot just before it
@@ -320,6 +327,13 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                     }
                     else if (key.Key == ConsoleKey.RightArrow)
                     {
+                        // If abandoning an edit, restore the block's original slots in occupied[]
+                        // (they were freed on Ctrl+E to allow live resize).
+                        if (editing && selectedBlock != null)
+                        {
+                            for (var s = selectedBlock.StartSlot; s < selectedBlock.StartSlot + selectedBlock.Length; s++)
+                                occupied[s] = true;
+                        }
                         if (selectedBlock != null)
                         {
                             // On an existing block: jump to slot just after it
@@ -368,10 +382,16 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                             if (cursorSlot + newLen <= 96 && !IsOverlapping(cursorSlot, newLen, occupied))
                                 selectionLength = newLen;
                         }
+                        else if (editing && CanGrowBlock(selectedBlock.StartSlot, selectionLength, occupied))
+                        {
+                            selectionLength++;
+                        }
                     }
                     else if (key.Key == ConsoleKey.DownArrow)
                     {
                         if (selectedBlock == null && selectionLength > 1)
+                            selectionLength--;
+                        else if (editing && selectedBlock != null && selectionLength > 1)
                             selectionLength--;
                     }
                     else if (key.Key == ConsoleKey.PageUp)
@@ -405,10 +425,16 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                     }
                     else if (key.Key == ConsoleKey.E && key.Modifiers.HasFlag(ConsoleModifiers.Control))
                     {
-                        // Ctrl+E: edit selected block's label and ticket
+                        // Ctrl+E: edit selected block's label, ticket, and length.
+                        // Free the block's slots in occupied[] so resize can reuse them;
+                        // Enter re-marks per selectionLength, abandon paths re-mark per the block's original length.
                         if (selectedBlock != null && !editing)
                         {
                             editing = true;
+                            cursorSlot = selectedBlock.StartSlot;
+                            selectionLength = selectedBlock.Length;
+                            for (var s = selectedBlock.StartSlot; s < selectedBlock.StartSlot + selectedBlock.Length; s++)
+                                occupied[s] = false;
                             inputBuffer.Clear();
                             inputBuffer.Append(selectedBlock.Label);
                             inputCursor = inputBuffer.Length;
@@ -423,14 +449,19 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                     {
                         if (editing && selectedBlock != null && inputBuffer.Length > 0)
                         {
-                            // Save edited label and ticket
+                            // Save edited label, ticket, and (possibly resized) length.
+                            // The block's original slots were freed in occupied[] on Ctrl+E.
                             var newLabel = inputBuffer.ToString();
                             var newTicket = ticketBuffer.ToString();
                             var idx = bookedBlocks.IndexOf(selectedBlock);
                             if (idx >= 0)
                             {
-                                selectedBlock = selectedBlock with { Label = newLabel, Ticket = newTicket };
+                                selectedBlock = selectedBlock with { Length = selectionLength, Label = newLabel, Ticket = newTicket };
                                 bookedBlocks[idx] = selectedBlock;
+
+                                for (var s = selectedBlock.StartSlot; s < selectedBlock.StartSlot + selectedBlock.Length; s++)
+                                    occupied[s] = true;
+
                                 PunchStorage.Save(workingDate, bookedBlocks);
                             }
                             editing = false;
@@ -561,6 +592,12 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
             if (occupied[i])
                 return true;
         return false;
+    }
+
+    internal static bool CanGrowBlock(int startSlot, int currentLength, bool[] occupied)
+    {
+        var next = startSlot + currentLength;
+        return next < 96 && !occupied[next];
     }
 
     private static void UpdateLayout(Layout layout, List<TimeBlock> bookedBlocks, StringBuilder inputBuffer, string filePath, bool confirming = false, int cursorSlot = 0, int selectionLength = 1, bool[]? occupied = null, TimeBlock? selectedBlock = null, bool editing = false, bool showHelp = false, bool showTicketSummary = false, int inputCursor = 0, StringBuilder? ticketBuffer = null, int ticketCursor = 0, int activeField = 0, int logScrollOffset = 0)

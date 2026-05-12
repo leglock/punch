@@ -751,7 +751,7 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
             var helpText = new Markup(
                 "[bold]Left/Right[/]  Move cursor / Jump between blocks\n" +
                 "[bold]Up/Down[/]     Resize selection\n" +
-                "[bold]PgUp/PgDn[/]  Scroll time log\n" +
+                "[bold]PgUp/PgDn[/]   Scroll time log\n" +
                 "[bold]Enter[/]       Log time entry\n" +
                 "[bold]Tab[/]         Switch input field\n" +
                 "[bold]Ctrl+E[/]      Edit selected entry\n" +

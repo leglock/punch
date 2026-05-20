@@ -904,10 +904,10 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
         var totalMins = totalMinutesAll % 60;
         var totalFormatted = totalMins > 0 ? $"{totalHours}h {totalMins}m" : $"{totalHours}h 0m";
         var percent = totalMinutesAll * 100 / 480;
-        var statusLeftPlain = $"  {filePath}  ?=help F3=tickets";
+        var statusLeftPlain = $"  {filePath}  ?=help F3=summary";
         var statusRight = $"{totalFormatted}    {percent}% of 8h  ";
         var padding = Math.Max(0, consoleWidth - statusLeftPlain.Length - statusRight.Length);
-        var statusBar = $"[white on orangered1]  {Markup.Escape(filePath)}  [dim]?=help F3=tickets[/]{new string(' ', padding)}{Markup.Escape(statusRight)}[/]";
+        var statusBar = $"[white on orangered1]  {Markup.Escape(filePath)}  [bold yellow]?=help F3=summary[/]{new string(' ', padding)}{Markup.Escape(statusRight)}[/]";
         layout["StatusBar"].Update(new Markup(statusBar));
     }
 

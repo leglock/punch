@@ -23,7 +23,7 @@ Two-project .NET 10 solution (`Punch.slnx`): the `Punch.CLI` console app (Spectr
 
 - **`PunchCommand`** — default command; renders a full-screen alternate buffer TUI with timeline, entry list, input, and status bar via `AnsiConsole.Live`. The `Execute` method contains the entire TUI event loop — keyboard input is processed in a `while(true)` loop with `Console.ReadKey`, mutating local state variables and calling `UpdateLayout` after each keypress.
 - **`PunchCommandSettings`** — CLI options: `--version`/`-v`, `--date`/`-d` (yyyy-MM-dd override).
-- **`TimeBlock`** — immutable record representing a booked time slot (StartSlot, Length, Label, Ticket). Slots are 0–95 (96 quarter-hours in a day). Ticket is optional (defaults to `""`). The `IsLunch` computed property (case-insensitive "lunch" substring match on Label) is used to exclude lunch blocks from the workday total.
+- **`TimeBlock`** — immutable record representing a booked time slot (StartSlot, Length, Label, Ticket). Slots are 0–95 (96 quarter-hours in a day). Ticket is optional (defaults to `""`). The `IsUnpaid` computed property (case-insensitive "lunch" or "break" substring match on Label) is used to exclude lunch and break blocks from the workday total.
 - **`PunchStorage`** — static helper for JSON persistence. One file per day at `~/.punch/data/yyyy-MM-dd.json` (override via `DataDirectoryOverride` — used by tests to isolate to a temp dir). Auto-saves on every add, edit, and delete. Validates blocks on load (skips invalid ranges and overlaps).
 - **`PunchData` / `TimeBlockDto`** — JSON serialization DTOs.
 

@@ -35,7 +35,8 @@ internal sealed class PunchCommandSettings : CommandSettings
 
 internal sealed record TimeBlock(int StartSlot, int Length, string Label, string Ticket = "")
 {
-    public bool IsLunch => Label.Contains("lunch", StringComparison.OrdinalIgnoreCase);
+    public bool IsUnpaid => Label.Contains("lunch", StringComparison.OrdinalIgnoreCase)
+        || Label.Contains("break", StringComparison.OrdinalIgnoreCase);
 }
 
 internal sealed class PunchData
@@ -681,7 +682,7 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                 currentBlockIndex = pixelBlockIndex[i];
                 barMarkup.Append(currentState switch
                 {
-                    1 => currentBlockIndex >= 0 && currentBlockIndex < bookedBlocks.Count && bookedBlocks[currentBlockIndex].IsLunch
+                    1 => currentBlockIndex >= 0 && currentBlockIndex < bookedBlocks.Count && bookedBlocks[currentBlockIndex].IsUnpaid
                             ? "[grey50]"
                             : currentBlockIndex % 2 == 0 ? "[orangered1]" : "[orange3]",
                     2 => "[bold yellow]",
@@ -760,7 +761,7 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                 var blockIdx = bookedBlocks.IndexOf(b);
                 var squareColor = isSelected
                     ? "white"
-                    : b.IsLunch
+                    : b.IsUnpaid
                         ? "grey50"
                         : blockIdx % 2 == 0 ? "orangered1" : "orange3";
                 var totalMinutes = b.Length * 15;
@@ -898,7 +899,7 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
         }
 
         // Status bar
-        var totalMinutesAll = bookedBlocks.Where(b => !b.IsLunch).Sum(b => b.Length * 15);
+        var totalMinutesAll = bookedBlocks.Where(b => !b.IsUnpaid).Sum(b => b.Length * 15);
         var totalHours = totalMinutesAll / 60;
         var totalMins = totalMinutesAll % 60;
         var totalFormatted = totalMins > 0 ? $"{totalHours}h {totalMins}m" : $"{totalHours}h 0m";

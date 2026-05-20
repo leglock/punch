@@ -10,10 +10,13 @@ public class TimeBlockTests
     [InlineData("LUNCH break")]
     [InlineData("team lunch")]
     [InlineData("Out for Lunch with the crew")]
-    public void IsLunch_DetectsLunchLabelCaseInsensitive(string label)
+    [InlineData("Break")]
+    [InlineData("coffee BREAK")]
+    [InlineData("short break with the team")]
+    public void IsUnpaid_DetectsLunchAndBreakLabelsCaseInsensitive(string label)
     {
         var block = new TimeBlock(0, 4, label);
-        Assert.True(block.IsLunch);
+        Assert.True(block.IsUnpaid);
     }
 
     [Theory]
@@ -21,10 +24,13 @@ public class TimeBlockTests
     [InlineData("meeting")]
     [InlineData("standup")]
     [InlineData("luncheon")] // contains "lunch" substring — documents current behavior
-    public void IsLunch_BehaviorForNonLunchLabels(string label)
+    [InlineData("breakfast")] // contains "break" substring — documents current behavior
+    public void IsUnpaid_BehaviorForNonUnpaidLabels(string label)
     {
         var block = new TimeBlock(0, 4, label);
-        Assert.Equal(label.Contains("lunch", System.StringComparison.OrdinalIgnoreCase), block.IsLunch);
+        var expected = label.Contains("lunch", System.StringComparison.OrdinalIgnoreCase)
+            || label.Contains("break", System.StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(expected, block.IsUnpaid);
     }
 
     [Fact]

@@ -907,7 +907,7 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
         var statusLeftPlain = $"  {filePath}  ?=help F3=summary";
         var statusRight = $"{totalFormatted}    {percent}% of 8h  ";
         var padding = Math.Max(0, consoleWidth - statusLeftPlain.Length - statusRight.Length);
-        var statusBar = $"[white on orangered1]  {Markup.Escape(filePath)}  [bold yellow]?=help F3=summary[/]{new string(' ', padding)}{Markup.Escape(statusRight)}[/]";
+        var statusBar = $"[white on orangered1]  {Markup.Escape(filePath)}  [bold yellow]?=help F3=summary[/]{new string(' ', padding)}[bold white]{Markup.Escape(statusRight)}[/][/]";
         layout["StatusBar"].Update(new Markup(statusBar));
     }
 

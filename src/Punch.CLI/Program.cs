@@ -35,8 +35,10 @@ internal sealed class PunchCommandSettings : CommandSettings
 
 internal sealed record TimeBlock(int StartSlot, int Length, string Label, string Ticket = "")
 {
-    public bool IsUnpaid => Label.Contains("lunch", StringComparison.OrdinalIgnoreCase)
-        || Label.Contains("break", StringComparison.OrdinalIgnoreCase);
+    private static readonly System.Text.RegularExpressions.Regex UnpaidRegex =
+        new(@"\b(lunch|break)\b", System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Compiled);
+
+    public bool IsUnpaid => UnpaidRegex.IsMatch(Label);
 }
 
 internal sealed class PunchData

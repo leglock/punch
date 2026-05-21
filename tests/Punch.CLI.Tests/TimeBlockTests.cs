@@ -13,6 +13,12 @@ public class TimeBlockTests
     [InlineData("Break")]
     [InlineData("coffee BREAK")]
     [InlineData("short break with the team")]
+    [InlineData("lunch!")]
+    [InlineData("break-time")]
+    [InlineData("lunch/break")]
+    [InlineData("my lunch.")]
+    [InlineData("LuNcH")]
+    [InlineData("bReAk")]
     public void IsUnpaid_DetectsLunchAndBreakLabelsCaseInsensitive(string label)
     {
         var block = new TimeBlock(0, 4, label);
@@ -23,14 +29,18 @@ public class TimeBlockTests
     [InlineData("")]
     [InlineData("meeting")]
     [InlineData("standup")]
-    [InlineData("luncheon")] // contains "lunch" substring — documents current behavior
-    [InlineData("breakfast")] // contains "break" substring — documents current behavior
-    public void IsUnpaid_BehaviorForNonUnpaidLabels(string label)
+    [InlineData("luncheon")]
+    [InlineData("breakfast")]
+    [InlineData("breaking changes")]
+    [InlineData("system breakdown")]
+    [InlineData("lunchbox")]
+    [InlineData("lunch1")]
+    [InlineData("1break")]
+    [InlineData("   ")]
+    public void IsUnpaid_ReturnsFalseForNonUnpaidLabelsAndSubstrings(string label)
     {
         var block = new TimeBlock(0, 4, label);
-        var expected = label.Contains("lunch", System.StringComparison.OrdinalIgnoreCase)
-            || label.Contains("break", System.StringComparison.OrdinalIgnoreCase);
-        Assert.Equal(expected, block.IsUnpaid);
+        Assert.False(block.IsUnpaid);
     }
 
     [Fact]

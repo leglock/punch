@@ -111,9 +111,18 @@ internal static class PunchStorage
             }
             return result;
         }
-        catch
+        catch (JsonException ex)
         {
-            return new List<TimeBlock>();
+            var backupPath = path + ".bak";
+            try
+            {
+                File.Copy(path, backupPath, overwrite: true);
+            }
+            catch (Exception backupEx)
+            {
+                throw new InvalidOperationException($"The daily log file is corrupted and could not be backed up ({backupEx.Message}). Original parse error: {ex.Message}", ex);
+            }
+            throw new InvalidOperationException($"The daily log file is corrupted. A backup has been created at '{backupPath}'. Parse error: {ex.Message}", ex);
         }
     }
 
@@ -171,7 +180,17 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
         var ticketCursor = 0;
         var activeField = 0; // 0 = Description, 1 = Ticket
         var selectionLength = 1; // number of 15-min slots selected (min 1)
-        var bookedBlocks = PunchStorage.Load(workingDate);
+        List<TimeBlock> bookedBlocks;
+        try
+        {
+            bookedBlocks = PunchStorage.Load(workingDate);
+        }
+        catch (Exception ex)
+        {
+            AnsiConsole.MarkupLine($"[bold red]Error:[/] Failed to load time log from [bold cyan]{Markup.Escape(filePath)}[/].");
+            AnsiConsole.MarkupLine($"[bold yellow]Reason:[/] {Markup.Escape(ex.Message)}");
+            return 1;
+        }
         var occupied = new bool[96];
         foreach (var block in bookedBlocks)
             for (var s = block.StartSlot; s < block.StartSlot + block.Length; s++)

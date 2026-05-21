@@ -103,14 +103,19 @@ public class PunchStorageTests : IDisposable
     }
 
     [Fact]
-    public void Load_ReturnsEmptyOnMalformedJson()
+    public void Load_ThrowsExceptionAndCreatesBackupOnMalformedJson()
     {
         var date = new DateOnly(2026, 5, 4);
-        File.WriteAllText(PunchStorage.GetFilePath(date), "{ this is not valid json");
+        var path = PunchStorage.GetFilePath(date);
+        var corruptContent = "{ this is not valid json";
+        File.WriteAllText(path, corruptContent);
 
-        var blocks = PunchStorage.Load(date);
+        var ex = Assert.Throws<InvalidOperationException>(() => PunchStorage.Load(date));
+        Assert.Contains("corrupted", ex.Message);
 
-        Assert.Empty(blocks);
+        var backupPath = path + ".bak";
+        Assert.True(File.Exists(backupPath));
+        Assert.Equal(corruptContent, File.ReadAllText(backupPath));
     }
 
     [Fact]

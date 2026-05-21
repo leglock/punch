@@ -211,7 +211,9 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
 
         AnsiConsole.AlternateScreen(() =>
         {
-            AnsiConsole.Cursor.Hide();
+            try
+            {
+                AnsiConsole.Cursor.Hide();
 
             var layout = new Layout("Root")
                 .SplitRows(
@@ -598,6 +600,11 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                     ctx.Refresh();
                 }
             });
+            }
+            finally
+            {
+                AnsiConsole.Cursor.Show();
+            }
         });
 
         return 0;

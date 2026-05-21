@@ -143,7 +143,10 @@ internal static class PunchStorage
         };
 
         var json = JsonSerializer.Serialize(data, new JsonSerializerOptions { WriteIndented = true });
-        File.WriteAllText(GetFilePath(date), json);
+        var path = GetFilePath(date);
+        var tmpPath = path + ".tmp";
+        File.WriteAllText(tmpPath, json);
+        File.Move(tmpPath, path, overwrite: true);
     }
 }
 
@@ -348,6 +351,8 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                         }
                         editing = false;
                         activeField = 0;
+                        inputBuffer.Clear(); inputCursor = 0;
+                        ticketBuffer.Clear(); ticketCursor = 0;
                     }
                     else if (key.Key == ConsoleKey.RightArrow)
                     {
@@ -397,6 +402,8 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                         }
                         editing = false;
                         activeField = 0;
+                        inputBuffer.Clear(); inputCursor = 0;
+                        ticketBuffer.Clear(); ticketCursor = 0;
                     }
                     else if (key.Key == ConsoleKey.UpArrow)
                     {

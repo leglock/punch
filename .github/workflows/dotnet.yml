@@ -48,7 +48,7 @@ jobs:
         dotnet-version: 10.0.x
     - name: Install coverage tools
       run: |
-        dotnet tool install --global JetBrains.dotCover.GlobalTool
+        dotnet tool install --global JetBrains.dotCover.CommandLineTools
         dotnet tool install --global dotnet-reportgenerator-globaltool
     - name: Run tests with dotCover
       run: |

@@ -166,6 +166,10 @@ coverage*.json
 coverage*.xml
 coverage*.info
 
+# Local coverage run output (test results + ReportGenerator report)
+coverage/
+coverage-report/
+
 # Visual Studio code coverage results
 *.coverage
 *.coveragexml

@@ -29,36 +29,21 @@ jobs:
 
   coverage:
     needs: build
-    if: github.event_name == 'push'
     runs-on: ubuntu-latest
-    permissions:
-      pages: write
-      id-token: write
-    environment:
-      name: github-pages
-      url: ${{ steps.deploy.outputs.page_url }}
-    concurrency:
-      group: pages
-      cancel-in-progress: true
     steps:
     - uses: actions/checkout@v4
     - name: Setup .NET
       uses: actions/setup-dotnet@v4
       with:
         dotnet-version: 10.0.x
-    - name: Install coverage tools
-      run: |
-        dotnet tool install --global JetBrains.dotCover.CommandLineTools
-        dotnet tool install --global dotnet-reportgenerator-globaltool
-    - name: Run tests with dotCover
-      run: |
-        dotnet dotcover test \
-          --dcReportType=DetailedXML \
-          --dcOutput=dotCover.xml
+    - name: Run tests with coverage
+      run: dotnet test --collect:"XPlat Code Coverage" --results-directory ./coverage
     - name: Generate HTML report
       run: |
-        reportgenerator \
-          -reports:dotCover.xml \
+        dotnet tool install --global dotnet-reportgenerator-globaltool
+        echo "$HOME/.dotnet/tools" >> "$GITHUB_PATH"
+        "$HOME/.dotnet/tools/reportgenerator" \
+          -reports:'coverage/**/coverage.cobertura.xml' \
           -targetdir:coverage-report \
           -reporttypes:"Html;JsonSummary"
     - name: Build shields.io coverage badge endpoint
@@ -72,9 +57,25 @@ jobs:
           '{schemaVersion:1,label:"coverage",message:$msg,color:$color}' \
           > coverage-report/coverage-badge.json
     - name: Upload Pages artifact
+      if: github.event_name == 'push'
       uses: actions/upload-pages-artifact@v3
       with:
         path: coverage-report
+
+  deploy-pages:
+    needs: coverage
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    concurrency:
+      group: pages
+      cancel-in-progress: true
+    steps:
     - name: Deploy to GitHub Pages
       id: deploy
       uses: actions/deploy-pages@v4

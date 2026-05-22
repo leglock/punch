@@ -27,6 +27,58 @@ jobs:
     - name: Test
       run: dotnet test --no-build --verbosity normal
 
+  coverage:
+    needs: build
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    concurrency:
+      group: pages
+      cancel-in-progress: true
+    steps:
+    - uses: actions/checkout@v4
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: 10.0.x
+    - name: Install coverage tools
+      run: |
+        dotnet tool install --global JetBrains.dotCover.GlobalTool
+        dotnet tool install --global dotnet-reportgenerator-globaltool
+    - name: Run tests with dotCover
+      run: |
+        dotnet dotcover test \
+          --dcReportType=DetailedXML \
+          --dcOutput=dotCover.xml
+    - name: Generate HTML report
+      run: |
+        reportgenerator \
+          -reports:dotCover.xml \
+          -targetdir:coverage-report \
+          -reporttypes:"Html;JsonSummary"
+    - name: Build shields.io coverage badge endpoint
+      run: |
+        PCT=$(jq -r '.summary.linecoverage' coverage-report/Summary.json)
+        PCT_INT=${PCT%.*}
+        if [ "$PCT_INT" -ge 80 ]; then COLOR=brightgreen
+        elif [ "$PCT_INT" -ge 60 ]; then COLOR=yellow
+        else COLOR=red; fi
+        jq -n --arg msg "${PCT}%" --arg color "$COLOR" \
+          '{schemaVersion:1,label:"coverage",message:$msg,color:$color}' \
+          > coverage-report/coverage-badge.json
+    - name: Upload Pages artifact
+      uses: actions/upload-pages-artifact@v3
+      with:
+        path: coverage-report
+    - name: Deploy to GitHub Pages
+      id: deploy
+      uses: actions/deploy-pages@v4
+
   release:
     needs: build
     if: github.event_name == 'push'

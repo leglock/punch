@@ -1,4 +1,12 @@
 # punch
+
+[![build](https://img.shields.io/github/actions/workflow/status/leglock/punch/dotnet.yml?branch=main)](../../actions)
+[![coverage](https://img.shields.io/endpoint?url=https://leglock.github.io/punch/coverage-badge.json)](https://leglock.github.io/punch/)
+[![.NET](https://img.shields.io/badge/.NET-10-512BD4?logo=dotnet&logoColor=white)](https://dotnet.microsoft.com/download)
+[![release](https://img.shields.io/github/v/release/leglock/punch)](../../releases)
+[![downloads](https://img.shields.io/github/downloads/leglock/punch/total)](../../releases)
+[![license](https://img.shields.io/github/license/leglock/punch)](LICENSE)
+
 A TUI time tracker for your workday. Log, label, and export your hours without leaving the terminal.
 
 ![punch demo](assets/punch-demo.gif)

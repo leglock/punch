@@ -148,4 +148,110 @@ public class PunchStorageTests : IDisposable
 
         Assert.True(Directory.Exists(nestedDir));
     }
+
+    [Fact]
+    public void GetDisplayPath_SubstitutesTildeWhenUnderHome()
+    {
+        var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        PunchStorage.DataDirectoryOverride = Path.Combine(home, ".punch-test", "data");
+
+        var display = PunchStorage.GetDisplayPath(new DateOnly(2026, 5, 4));
+
+        Assert.StartsWith("~", display);
+        Assert.EndsWith("2026-05-04.json", display);
+    }
+
+    [Fact]
+    public void GetDisplayPath_ReturnsAbsolutePathWhenOutsideHome()
+    {
+        // _tempDir lives under the system temp dir, which is not under the user's home on Linux.
+        var display = PunchStorage.GetDisplayPath(new DateOnly(2026, 5, 4));
+
+        Assert.StartsWith(_tempDir, display);
+        Assert.DoesNotContain("~", display);
+    }
+
+    [Fact]
+    public void Load_ReturnsEmptyWhenJsonIsNullLiteral()
+    {
+        var date = new DateOnly(2026, 5, 4);
+        File.WriteAllText(PunchStorage.GetFilePath(date), "null");
+
+        Assert.Empty(PunchStorage.Load(date));
+    }
+
+    [Fact]
+    public void Load_ReturnsEmptyWhenBlocksFieldIsNull()
+    {
+        var date = new DateOnly(2026, 5, 4);
+        File.WriteAllText(PunchStorage.GetFilePath(date), """{ "Blocks": null }""");
+
+        Assert.Empty(PunchStorage.Load(date));
+    }
+
+    [Fact]
+    public void Load_ReturnsEmptyWhenBlocksArrayIsEmpty()
+    {
+        var date = new DateOnly(2026, 5, 4);
+        File.WriteAllText(PunchStorage.GetFilePath(date), """{ "Blocks": [] }""");
+
+        Assert.Empty(PunchStorage.Load(date));
+    }
+
+    [Fact]
+    public void Load_DefaultsTicketToEmptyStringWhenFieldMissing()
+    {
+        var date = new DateOnly(2026, 5, 4);
+        File.WriteAllText(PunchStorage.GetFilePath(date), """
+        {
+          "Blocks": [
+            { "StartSlot": 32, "Length": 4, "Label": "NoTicketField" }
+          ]
+        }
+        """);
+
+        var only = Assert.Single(PunchStorage.Load(date));
+        Assert.Equal("", only.Ticket);
+    }
+
+    [Fact]
+    public void Save_EmptyListRoundTripsAsEmpty()
+    {
+        var date = new DateOnly(2026, 5, 4);
+
+        PunchStorage.Save(date, new List<TimeBlock>());
+
+        Assert.True(File.Exists(PunchStorage.GetFilePath(date)));
+        Assert.Empty(PunchStorage.Load(date));
+    }
+
+    [Fact]
+    public void Save_OverwritesExistingFileAndDropsRemovedBlocks()
+    {
+        var date = new DateOnly(2026, 5, 4);
+        PunchStorage.Save(date, new List<TimeBlock>
+        {
+            new(32, 4, "First", "ABC-1"),
+            new(36, 4, "Second", "ABC-2"),
+        });
+
+        PunchStorage.Save(date, new List<TimeBlock>
+        {
+            new(32, 4, "First", "ABC-1"),
+        });
+
+        var loaded = PunchStorage.Load(date);
+        var only = Assert.Single(loaded);
+        Assert.Equal("First", only.Label);
+    }
+
+    [Fact]
+    public void Save_LeavesNoTempFileBehind()
+    {
+        var date = new DateOnly(2026, 5, 4);
+        PunchStorage.Save(date, new List<TimeBlock> { new(32, 4, "Test", "ABC-1") });
+
+        var tmpPath = PunchStorage.GetFilePath(date) + ".tmp";
+        Assert.False(File.Exists(tmpPath));
+    }
 }

@@ -50,6 +50,7 @@ jobs:
       run: |
         dotnet tool install --global JetBrains.dotCover.CommandLineTools
         dotnet tool install --global dotnet-reportgenerator-globaltool
+        echo "$HOME/.dotnet/tools" >> "$GITHUB_PATH"
     - name: Run tests with dotCover
       run: |
         dotnet dotcover test \

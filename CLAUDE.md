@@ -12,6 +12,7 @@ Punch is a TUI time tracker for your workday. Log, label, and export your hours 
 dotnet build                                              # Build the solution
 dotnet test                                               # Run all tests
 dotnet test --filter "FullyQualifiedName~PunchStorage"    # Run tests matching a name
+dotnet test --collect:"XPlat Code Coverage"               # Run tests with coverage (Coverlet)
 dotnet run --project src/Punch.CLI                        # Run the app
 dotnet run --project src/Punch.CLI -- --version           # Show version
 dotnet run --project src/Punch.CLI -- --date 2026-05-04   # Open a specific date
@@ -19,7 +20,7 @@ dotnet run --project src/Punch.CLI -- --date 2026-05-04   # Open a specific date
 
 ## Architecture
 
-Two-project .NET 10 solution (`Punch.slnx`): the `Punch.CLI` console app (Spectre.Console.Cli for command parsing and TUI rendering) and `Punch.CLI.Tests` (xUnit). All app types live in a single `Program.cs`. The CLI project exposes its internals to the test project via `<InternalsVisibleTo Include="Punch.CLI.Tests" />` — tests reference `PunchStorage`, `TimeBlock`, etc. directly.
+Two-project .NET 10 solution (`Punch.slnx`): the `Punch.CLI` console app (`src/Punch.CLI/`, Spectre.Console.Cli for command parsing and TUI rendering) and `Punch.CLI.Tests` (`tests/Punch.CLI.Tests/`, xUnit). All app types live in a single `Program.cs`. The CLI project exposes its internals to the test project via `<InternalsVisibleTo Include="Punch.CLI.Tests" />` — tests reference `PunchStorage`, `TimeBlock`, etc. directly.
 
 - **`PunchCommand`** — default command; renders a full-screen alternate buffer TUI with timeline, entry list, input, and status bar via `AnsiConsole.Live`. The `Execute` method contains the entire TUI event loop — keyboard input is processed in a `while(true)` loop with `Console.ReadKey`, mutating local state variables and calling `UpdateLayout` after each keypress.
 - **`PunchCommandSettings`** — CLI options: `--version`/`-v`, `--date`/`-d` (yyyy-MM-dd override).
@@ -49,4 +50,6 @@ The timeline bar in `UpdateLayout` maps 96 quarter-hour slots to pixel positions
 
 GitHub Actions workflow (`.github/workflows/dotnet.yml`) runs on push to main and PRs:
 - **`build` job** — restore, build, test (runs on all triggers)
+- **`coverage` job** — collects coverage with Coverlet (`coverlet.collector` in the test project, `--collect:"XPlat Code Coverage"`), builds an HTML report + shields.io badge JSON via ReportGenerator (runs on all triggers)
+- **`deploy-pages` job** — publishes the coverage report to GitHub Pages (push to main only)
 - **`release` job** — publishes self-contained Windows and Linux binaries and creates a GitHub release (push to main only). Release tags follow `v{csproj-version}-build.{run_number}` format. The build number is stamped into `AssemblyInformationalVersion` via `-p:Version=` so `punch --version` reports the full version.

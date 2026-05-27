@@ -231,6 +231,7 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                 ctx.Refresh();
 
                 var confirming = false;
+                var confirmingDelete = false;
 
                 while (true)
                 {
@@ -242,6 +243,33 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                             break;
 
                         confirming = false;
+                        UpdateLayout(layout, bookedBlocks, inputBuffer, filePath, cursorSlot: cursorSlot, selectionLength: selectionLength, occupied: occupied, selectedBlock: selectedBlock, editing: editing, showHelp: showHelp, showTicketSummary: showTicketSummary, inputCursor: inputCursor, ticketBuffer: ticketBuffer, ticketCursor: ticketCursor, activeField: activeField, logScrollOffset: logScrollOffset);
+                        ctx.Refresh();
+                        continue;
+                    }
+
+                    if (confirmingDelete)
+                    {
+                        if (key.Key == ConsoleKey.D)
+                        {
+                            for (var s = selectedBlock!.StartSlot; s < selectedBlock.StartSlot + selectedBlock.Length; s++)
+                                occupied[s] = false;
+                            bookedBlocks.Remove(selectedBlock);
+                            PunchStorage.Save(workingDate, bookedBlocks);
+                            selectedBlock = null;
+                            selectionLength = 1;
+                            editing = false;
+                            inputBuffer.Clear();
+                            inputCursor = 0;
+                            ticketBuffer.Clear();
+                            ticketCursor = 0;
+                            activeField = 0;
+                        }
+                        else
+                        {
+                            confirmingDelete = false;
+                        }
+
                         UpdateLayout(layout, bookedBlocks, inputBuffer, filePath, cursorSlot: cursorSlot, selectionLength: selectionLength, occupied: occupied, selectedBlock: selectedBlock, editing: editing, showHelp: showHelp, showTicketSummary: showTicketSummary, inputCursor: inputCursor, ticketBuffer: ticketBuffer, ticketCursor: ticketCursor, activeField: activeField, logScrollOffset: logScrollOffset);
                         ctx.Refresh();
                         continue;
@@ -266,11 +294,11 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                     if (showTicketSummary)
                     {
                         if (key.Key == ConsoleKey.F3)
+                        {
                             showTicketSummary = false;
-                        else
-                            showTicketSummary = false;
-                        UpdateLayout(layout, bookedBlocks, inputBuffer, filePath, cursorSlot: cursorSlot, selectionLength: selectionLength, occupied: occupied, selectedBlock: selectedBlock, editing: editing, showHelp: showHelp, showTicketSummary: showTicketSummary, inputCursor: inputCursor, ticketBuffer: ticketBuffer, ticketCursor: ticketCursor, activeField: activeField, logScrollOffset: logScrollOffset);
-                        ctx.Refresh();
+                            UpdateLayout(layout, bookedBlocks, inputBuffer, filePath, cursorSlot: cursorSlot, selectionLength: selectionLength, occupied: occupied, selectedBlock: selectedBlock, editing: editing, showHelp: showHelp, showTicketSummary: showTicketSummary, inputCursor: inputCursor, ticketBuffer: ticketBuffer, ticketCursor: ticketCursor, activeField: activeField, logScrollOffset: logScrollOffset);
+                            ctx.Refresh();
+                        }
                         continue;
                     }
 
@@ -436,22 +464,11 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                     }
                     else if (key.Key == ConsoleKey.D && key.Modifiers.HasFlag(ConsoleModifiers.Control))
                     {
-                        // Ctrl+D: delete selected block
                         if (selectedBlock != null)
                         {
-                            for (var s = selectedBlock.StartSlot; s < selectedBlock.StartSlot + selectedBlock.Length; s++)
-                                occupied[s] = false;
-                            bookedBlocks.Remove(selectedBlock);
-                            PunchStorage.Save(workingDate, bookedBlocks);
-                            selectedBlock = null;
-                            selectionLength = 1;
-                            editing = false;
-                            inputBuffer.Clear();
-                            inputCursor = 0;
-                            ticketBuffer.Clear();
-                            ticketCursor = 0;
-                            activeField = 0;
-                            currentCursor = 0;
+                            confirmingDelete = true;
+                            UpdateLayout(layout, bookedBlocks, inputBuffer, filePath, confirmingDelete: true, cursorSlot: cursorSlot, selectionLength: selectionLength, occupied: occupied, selectedBlock: selectedBlock, editing: editing, showHelp: showHelp, showTicketSummary: showTicketSummary, inputCursor: inputCursor, ticketBuffer: ticketBuffer, ticketCursor: ticketCursor, activeField: activeField, logScrollOffset: logScrollOffset);
+                            ctx.Refresh();
                         }
                     }
                     else if (key.Key == ConsoleKey.E && key.Modifiers.HasFlag(ConsoleModifiers.Control))
@@ -655,7 +672,7 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
         return (cursorSlot, selectionLength, selectedBlock);
     }
 
-    private static void UpdateLayout(Layout layout, List<TimeBlock> bookedBlocks, StringBuilder inputBuffer, string filePath, bool confirming = false, int cursorSlot = 0, int selectionLength = 1, bool[]? occupied = null, TimeBlock? selectedBlock = null, bool editing = false, bool showHelp = false, bool showTicketSummary = false, int inputCursor = 0, StringBuilder? ticketBuffer = null, int ticketCursor = 0, int activeField = 0, int logScrollOffset = 0)
+    private static void UpdateLayout(Layout layout, List<TimeBlock> bookedBlocks, StringBuilder inputBuffer, string filePath, bool confirming = false, bool confirmingDelete = false, int cursorSlot = 0, int selectionLength = 1, bool[]? occupied = null, TimeBlock? selectedBlock = null, bool editing = false, bool showHelp = false, bool showTicketSummary = false, int inputCursor = 0, StringBuilder? ticketBuffer = null, int ticketCursor = 0, int activeField = 0, int logScrollOffset = 0)
     {
         // Timeline pane
         var consoleWidth = System.Console.WindowWidth;
@@ -916,6 +933,13 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
         {
             layout["Input"].Update(
                 new Panel(new Markup("[bold yellow]Press Q again to quit[/]"))
+                    .Expand()
+                    .Border(BoxBorder.Rounded));
+        }
+        else if (confirmingDelete)
+        {
+            layout["Input"].Update(
+                new Panel(new Markup("[bold yellow]Press D again to delete[/]"))
                     .Expand()
                     .Border(BoxBorder.Rounded));
         }

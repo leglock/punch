@@ -520,12 +520,7 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                             activeField = 0;
                             currentCursor = 0;
 
-                            // Move cursor to next free position
-                            selectionLength = 1;
-                            while (cursorSlot < 96 && occupied[cursorSlot])
-                                cursorSlot++;
-                            if (cursorSlot >= 96)
-                                cursorSlot = 95;
+                            (cursorSlot, selectionLength, selectedBlock) = AdvanceAfterAdd(cursorSlot, bookedBlocks, occupied);
                         }
                     }
                     else if (key.Key == ConsoleKey.Backspace)
@@ -634,6 +629,30 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
     {
         var next = startSlot + currentLength;
         return next < 96 && !occupied[next];
+    }
+
+    internal static (int cursorSlot, int selectionLength, TimeBlock? selectedBlock) AdvanceAfterAdd(int cursorSlot, List<TimeBlock> bookedBlocks, bool[] occupied)
+    {
+        var selectionLength = 1;
+        TimeBlock? selectedBlock = null;
+
+        while (cursorSlot < 96 && occupied[cursorSlot])
+            cursorSlot++;
+        if (cursorSlot >= 96)
+        {
+            cursorSlot = 95;
+            if (occupied[95])
+            {
+                var adj = FindBlockAt(95, bookedBlocks);
+                if (adj != null)
+                {
+                    selectionLength = adj.Length;
+                    selectedBlock = adj;
+                }
+            }
+        }
+
+        return (cursorSlot, selectionLength, selectedBlock);
     }
 
     private static void UpdateLayout(Layout layout, List<TimeBlock> bookedBlocks, StringBuilder inputBuffer, string filePath, bool confirming = false, int cursorSlot = 0, int selectionLength = 1, bool[]? occupied = null, TimeBlock? selectedBlock = null, bool editing = false, bool showHelp = false, bool showTicketSummary = false, int inputCursor = 0, StringBuilder? ticketBuffer = null, int ticketCursor = 0, int activeField = 0, int logScrollOffset = 0)

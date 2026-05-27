@@ -264,6 +264,7 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                             ticketBuffer.Clear();
                             ticketCursor = 0;
                             activeField = 0;
+                            confirmingDelete = false;
                         }
                         else
                         {
@@ -469,6 +470,7 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                             confirmingDelete = true;
                             UpdateLayout(layout, bookedBlocks, inputBuffer, filePath, confirmingDelete: true, cursorSlot: cursorSlot, selectionLength: selectionLength, occupied: occupied, selectedBlock: selectedBlock, editing: editing, showHelp: showHelp, showTicketSummary: showTicketSummary, inputCursor: inputCursor, ticketBuffer: ticketBuffer, ticketCursor: ticketCursor, activeField: activeField, logScrollOffset: logScrollOffset);
                             ctx.Refresh();
+                            continue;
                         }
                     }
                     else if (key.Key == ConsoleKey.E && key.Modifiers.HasFlag(ConsoleModifiers.Control))

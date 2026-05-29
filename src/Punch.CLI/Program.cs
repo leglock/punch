@@ -686,8 +686,7 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
         var endMinutes = (endSlot % 4) * 15;
         var timeLabel = $"{startHours:D2}:{startMinutes:D2}\u2013{endHours:D2}:{endMinutes:D2}";
 
-        // Sort blocks chronologically so alternating colors are consistent
-        bookedBlocks.Sort((a, b) => a.StartSlot.CompareTo(b.StartSlot));
+        var sorted = bookedBlocks.OrderBy(b => b.StartSlot).ToList();
 
         // Build the bar line: mark booked slots, then overlay selection
         // Fixed pixels-per-slot for uniform block widths
@@ -696,9 +695,9 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
         var pixelState = new int[totalBarWidth]; // 0=free, 1=booked, 2=selected, 3=selected-existing
         var pixelBlockIndex = new int[totalBarWidth];
         Array.Fill(pixelBlockIndex, -1);
-        for (var blockIdx = 0; blockIdx < bookedBlocks.Count; blockIdx++)
+        for (var blockIdx = 0; blockIdx < sorted.Count; blockIdx++)
         {
-            var block = bookedBlocks[blockIdx];
+            var block = sorted[blockIdx];
             var bStart = block.StartSlot * pixelsPerSlot;
             var bEndExcl = (block.StartSlot + block.Length) * pixelsPerSlot;
             bStart = Math.Clamp(bStart, 0, totalBarWidth);
@@ -755,7 +754,7 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                 currentBlockIndex = pixelBlockIndex[i];
                 barMarkup.Append(currentState switch
                 {
-                    1 => currentBlockIndex >= 0 && currentBlockIndex < bookedBlocks.Count && bookedBlocks[currentBlockIndex].IsUnpaid
+                    1 => currentBlockIndex >= 0 && currentBlockIndex < sorted.Count && sorted[currentBlockIndex].IsUnpaid
                             ? "[grey50]"
                             : currentBlockIndex % 2 == 0 ? "[orangered1]" : "[orange3]",
                     2 => "[bold yellow]",
@@ -790,7 +789,7 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
         // Messages pane: show booked blocks sorted chronologically with scrolling
         var consoleHeight = System.Console.WindowHeight;
         var messagesHeight = Math.Max(1, consoleHeight - 10 - 2); // 10 = fixed panes (5+4+1), 2 = panel border
-        var sortedBlocks = bookedBlocks.OrderBy(b => b.StartSlot).ToList();
+        var sortedBlocks = sorted;
 
         // Clamp scroll offset to valid range and reserve lines for scroll indicators
         var availableLines = messagesHeight;
@@ -831,7 +830,7 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                 var em = (es % 4) * 15;
                 var escaped = Markup.Escape(b.Label);
                 var isSelected = selectedBlock != null && b.StartSlot == selectedBlock.StartSlot && b.Length == selectedBlock.Length;
-                var blockIdx = bookedBlocks.IndexOf(b);
+                var blockIdx = sorted.IndexOf(b);
                 var squareColor = isSelected
                     ? "white"
                     : b.IsUnpaid

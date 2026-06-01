@@ -535,12 +535,8 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
         // Timeline pane
         var consoleWidth = System.Console.WindowWidth;
         var barWidth = Math.Max(1, consoleWidth - 4); // account for panel border + padding
-        var startHours = cursorSlot / 4;
-        var startMinutes = (cursorSlot % 4) * 15;
         var endSlot = cursorSlot + selectionLength;
-        var endHours = endSlot / 4;
-        var endMinutes = (endSlot % 4) * 15;
-        var timeLabel = $"{startHours:D2}:{startMinutes:D2}–{endHours:D2}:{endMinutes:D2}";
+        var timeLabel = SlotTime.FormatRange(cursorSlot, endSlot);
 
         var sorted = bookedBlocks.OrderBy(b => b.StartSlot).ToList();
 
@@ -679,11 +675,7 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                 renderables.Add(new Markup($"[dim]  ▲ {clampedOffset} more above (PgUp)[/]"));
             foreach (var b in visibleBlocks)
             {
-                var sh = b.StartSlot / 4;
-                var sm = (b.StartSlot % 4) * 15;
-                var es = b.StartSlot + b.Length;
-                var eh = es / 4;
-                var em = (es % 4) * 15;
+                var timeRange = SlotTime.FormatRange(b.StartSlot, b.StartSlot + b.Length);
                 var escaped = Markup.Escape(b.Label);
                 var isSelected = selectedBlock != null && b.StartSlot == selectedBlock.StartSlot && b.Length == selectedBlock.Length;
                 var blockIdx = sorted.IndexOf(b);
@@ -692,14 +684,9 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                     : b.IsUnpaid
                         ? "grey50"
                         : blockIdx % 2 == 0 ? "orangered1" : "orange3";
-                var totalMinutes = b.Length * 15;
-                var durationText = totalMinutes >= 60
-                    ? totalMinutes % 60 == 0
-                        ? $"{totalMinutes / 60}h"
-                        : $"{totalMinutes / 60}h {totalMinutes % 60}m"
-                    : $"{totalMinutes}m";
+                var durationText = Duration.Humanize(b.Length * 15);
                 var ticketDisplay = string.IsNullOrEmpty(b.Ticket) ? "" : $"[cyan]{Markup.Escape(b.Ticket)}[/] ";
-                renderables.Add(new Markup($"[{squareColor}]■[/] [bold]{sh:D2}:{sm:D2}–{eh:D2}:{em:D2}[/] {ticketDisplay}{escaped} [dim grey]{durationText}[/]"));
+                renderables.Add(new Markup($"[{squareColor}]■[/] [bold]{timeRange}[/] {ticketDisplay}{escaped} [dim grey]{durationText}[/]"));
             }
             if (hasMoreBelow)
             {
@@ -749,20 +736,14 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
             var summaryLines = new List<IRenderable>();
             foreach (var g in ticketGroups)
             {
-                var mins = g.TotalMinutes;
-                var dur = mins >= 60
-                    ? mins % 60 == 0 ? $"{mins / 60}h" : $"{mins / 60}h {mins % 60}m"
-                    : $"{mins}m";
+                var dur = Duration.Humanize(g.TotalMinutes);
                 var visibleName = g.Ticket == "" ? "Other" : g.Ticket;
                 var paddedName = visibleName.PadRight(20);
                 var ticketLabel = g.Ticket == "" ? $"[dim]{paddedName}[/]" : $"[cyan]{Markup.Escape(paddedName)}[/]";
                 summaryLines.Add(new Markup($"  {ticketLabel} {dur}"));
             }
 
-            var totalMinutesSummary = bookedBlocks.Sum(b => b.Length * 15);
-            var totalH = totalMinutesSummary / 60;
-            var totalM = totalMinutesSummary % 60;
-            var totalDur = totalM > 0 ? $"{totalH}h {totalM}m" : $"{totalH}h 0m";
+            var totalDur = Duration.HumanizeTotal(bookedBlocks.Sum(b => b.Length * 15));
             summaryLines.Add(new Markup($"  [dim]{new string('─', 28)}[/]"));
             summaryLines.Add(new Markup($"  [bold]{"Total".PadRight(20)} {totalDur}[/]"));
 
@@ -835,9 +816,7 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
 
         // Status bar
         var totalMinutesAll = bookedBlocks.Where(b => !b.IsUnpaid).Sum(b => b.Length * 15);
-        var totalHours = totalMinutesAll / 60;
-        var totalMins = totalMinutesAll % 60;
-        var totalFormatted = totalMins > 0 ? $"{totalHours}h {totalMins}m" : $"{totalHours}h 0m";
+        var totalFormatted = Duration.HumanizeTotal(totalMinutesAll);
         var percent = totalMinutesAll * 100 / 480;
         var statusLeftPlain = $"  {filePath}  ?=help F3=summary";
         var statusRight = $"{totalFormatted}    {percent}% of 8h  ";

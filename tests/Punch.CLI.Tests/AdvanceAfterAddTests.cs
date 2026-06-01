@@ -8,12 +8,9 @@ public class AdvanceAfterAddTests
     [Fact]
     public void AdvancesToNextFreeSlot()
     {
-        var occupied = new bool[96];
-        occupied[4] = true;
-        var blocks = new List<TimeBlock> { new(4, 1, "existing", "") };
+        var schedule = new DaySchedule(new[] { new TimeBlock(4, 1, "existing", "") });
 
-        var (cursorSlot, selectionLength, selectedBlock) =
-            PunchCommand.AdvanceAfterAdd(4, blocks, occupied);
+        var (cursorSlot, selectionLength, selectedBlock) = schedule.AdvanceAfterAdd(4);
 
         Assert.Equal(5, cursorSlot);
         Assert.Equal(1, selectionLength);
@@ -23,16 +20,13 @@ public class AdvanceAfterAddTests
     [Fact]
     public void SkipsOverMultipleOccupiedSlots()
     {
-        var occupied = new bool[96];
-        for (var s = 4; s < 10; s++) occupied[s] = true;
-        var blocks = new List<TimeBlock>
+        var schedule = new DaySchedule(new[]
         {
-            new(4, 3, "block-a", ""),
-            new(7, 3, "block-b", ""),
-        };
+            new TimeBlock(4, 3, "block-a", ""),
+            new TimeBlock(7, 3, "block-b", ""),
+        });
 
-        var (cursorSlot, selectionLength, selectedBlock) =
-            PunchCommand.AdvanceAfterAdd(4, blocks, occupied);
+        var (cursorSlot, selectionLength, selectedBlock) = schedule.AdvanceAfterAdd(4);
 
         Assert.Equal(10, cursorSlot);
         Assert.Equal(1, selectionLength);
@@ -42,17 +36,14 @@ public class AdvanceAfterAddTests
     [Fact]
     public void FallsBackToSlot95WhenDayIsFull_SelectsExistingBlock()
     {
-        var occupied = new bool[96];
-        for (var s = 90; s < 96; s++) occupied[s] = true;
         var existingBlock = new TimeBlock(92, 4, "last-block", "TICKET");
-        var blocks = new List<TimeBlock>
+        var schedule = new DaySchedule(new[]
         {
-            new(90, 2, "almost-last", ""),
+            new TimeBlock(90, 2, "almost-last", ""),
             existingBlock,
-        };
+        });
 
-        var (cursorSlot, selectionLength, selectedBlock) =
-            PunchCommand.AdvanceAfterAdd(90, blocks, occupied);
+        var (cursorSlot, selectionLength, selectedBlock) = schedule.AdvanceAfterAdd(90);
 
         Assert.Equal(95, cursorSlot);
         Assert.Equal(existingBlock.Length, selectionLength);
@@ -62,11 +53,9 @@ public class AdvanceAfterAddTests
     [Fact]
     public void StaysAtCurrentSlotIfFree()
     {
-        var occupied = new bool[96];
-        var blocks = new List<TimeBlock>();
+        var schedule = new DaySchedule(new List<TimeBlock>());
 
-        var (cursorSlot, selectionLength, selectedBlock) =
-            PunchCommand.AdvanceAfterAdd(20, blocks, occupied);
+        var (cursorSlot, selectionLength, selectedBlock) = schedule.AdvanceAfterAdd(20);
 
         Assert.Equal(20, cursorSlot);
         Assert.Equal(1, selectionLength);

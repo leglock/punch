@@ -1,8 +1,6 @@
 using System.Reflection;
-using System.Text;
 using Spectre.Console;
 using Spectre.Console.Cli;
-using Spectre.Console.Rendering;
 
 namespace Punch.CLI;
 
@@ -67,10 +65,11 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                     new Layout("Messages").Ratio(4),
                     new Layout("Input").Size(4),
                     new Layout("StatusBar").Size(1));
+            var view = new PunchView(layout);
 
             AnsiConsole.Live(layout).Start(ctx =>
             {
-                UpdateLayout(layout, session);
+                view.Render(session);
                 ctx.Refresh();
 
                 var confirming = false;
@@ -86,7 +85,7 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                             break;
 
                         confirming = false;
-                        UpdateLayout(layout, session);
+                        view.Render(session);
                         ctx.Refresh();
                         continue;
                     }
@@ -112,7 +111,7 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                             confirmingDelete = false;
                         }
 
-                        UpdateLayout(layout, session);
+                        view.Render(session);
                         ctx.Refresh();
                         continue;
                     }
@@ -120,7 +119,7 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                     if (key.Key == ConsoleKey.Q && key.Modifiers.HasFlag(ConsoleModifiers.Control))
                     {
                         confirming = true;
-                        UpdateLayout(layout, session, confirming: true);
+                        view.Render(session, confirming: true);
                         ctx.Refresh();
                         continue;
                     }
@@ -128,7 +127,7 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                     if (session.ShowHelp)
                     {
                         session.ShowHelp = false;
-                        UpdateLayout(layout, session);
+                        view.Render(session);
                         ctx.Refresh();
                         continue;
                     }
@@ -138,7 +137,7 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                         if (key.Key == ConsoleKey.F3)
                         {
                             session.ShowTicketSummary = false;
-                            UpdateLayout(layout, session);
+                            view.Render(session);
                             ctx.Refresh();
                         }
                         continue;
@@ -147,7 +146,7 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                     if (key.Key == ConsoleKey.F3)
                     {
                         session.ShowTicketSummary = true;
-                        UpdateLayout(layout, session);
+                        view.Render(session);
                         ctx.Refresh();
                         continue;
                     }
@@ -155,7 +154,7 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                     if (key.KeyChar == '?' && session.SelectedBlock == null && !session.Editing && session.InputBuffer.Length == 0 && session.TicketBuffer.Length == 0)
                     {
                         session.ShowHelp = !session.ShowHelp;
-                        UpdateLayout(layout, session);
+                        view.Render(session);
                         ctx.Refresh();
                         continue;
                     }
@@ -307,7 +306,7 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                         if (session.SelectedBlock != null)
                         {
                             confirmingDelete = true;
-                            UpdateLayout(layout, session, confirmingDelete: true);
+                            view.Render(session, confirmingDelete: true);
                             ctx.Refresh();
                             continue;
                         }
@@ -443,7 +442,7 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                     var maxOff = Math.Max(0, schedule.Count - (viewHeight - 1));
                     session.LogScrollOffset = Math.Clamp(session.LogScrollOffset, 0, maxOff);
 
-                    UpdateLayout(layout, session);
+                    view.Render(session);
                     ctx.Refresh();
                 }
             });
@@ -455,333 +454,5 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
         });
 
         return 0;
-    }
-
-    private static void UpdateLayout(Layout layout, PunchSession session, bool confirming = false, bool confirmingDelete = false)
-    {
-        var bookedBlocks = session.Blocks;
-        var filePath = session.FilePath;
-        var cursorSlot = session.CursorSlot;
-        var selectionLength = session.SelectionLength;
-        var selectedBlock = session.SelectedBlock;
-        var editing = session.Editing;
-        var showHelp = session.ShowHelp;
-        var showTicketSummary = session.ShowTicketSummary;
-        var inputBuffer = session.InputBuffer;
-        var inputCursor = session.InputCursor;
-        var ticketBuffer = session.TicketBuffer;
-        var ticketCursor = session.TicketCursor;
-        var activeField = session.ActiveField;
-        var logScrollOffset = session.LogScrollOffset;
-
-        // Timeline pane
-        var consoleWidth = System.Console.WindowWidth;
-        var barWidth = Math.Max(1, consoleWidth - 4); // account for panel border + padding
-        var endSlot = cursorSlot + selectionLength;
-        var timeLabel = SlotTime.FormatRange(cursorSlot, endSlot);
-
-        var sorted = bookedBlocks.OrderBy(b => b.StartSlot).ToList();
-
-        // Build the bar line: mark booked slots, then overlay selection
-        // Fixed pixels-per-slot for uniform block widths
-        var pixelsPerSlot = Math.Max(1, barWidth / 96);
-        var totalBarWidth = pixelsPerSlot * 96;
-        var pixelState = new int[totalBarWidth]; // 0=free, 1=booked, 2=selected, 3=selected-existing
-        var pixelBlockIndex = new int[totalBarWidth];
-        Array.Fill(pixelBlockIndex, -1);
-        for (var blockIdx = 0; blockIdx < sorted.Count; blockIdx++)
-        {
-            var block = sorted[blockIdx];
-            var bStart = block.StartSlot * pixelsPerSlot;
-            var bEndExcl = (block.StartSlot + block.Length) * pixelsPerSlot;
-            bStart = Math.Clamp(bStart, 0, totalBarWidth);
-            bEndExcl = Math.Clamp(bEndExcl, bStart, totalBarWidth);
-            for (var px = bStart; px < bEndExcl; px++)
-            {
-                pixelState[px] = 1;
-                pixelBlockIndex[px] = blockIdx;
-            }
-        }
-
-        var selStartPos = cursorSlot * pixelsPerSlot;
-        var selEndExcl = endSlot * pixelsPerSlot;
-        if (selEndExcl == selStartPos) selEndExcl = selStartPos + 1;
-        selStartPos = Math.Clamp(selStartPos, 0, totalBarWidth - 1);
-        var selEndPos = Math.Clamp(selEndExcl - 1, selStartPos, totalBarWidth - 1);
-        // State 3 = selected existing block (cyan), State 2 = free selection (yellow)
-        var selPixelState = selectedBlock != null ? 3 : 2;
-        for (var i = selStartPos; i <= selEndPos; i++)
-            pixelState[i] = selPixelState;
-
-        // Build hour labels line
-        var labelChars = new char[totalBarWidth];
-        Array.Fill(labelChars, ' ');
-        var hourMarkers = new[] { 0, 6, 12, 18, 24 };
-        foreach (var h in hourMarkers)
-        {
-            var pos = h * 4 * pixelsPerSlot;
-            var label = h == 12 ? "12pm" : h < 12 ? $"{h}am" : $"{h - 12}pm";
-            if (h == 0 || h == 24) label = "12am";
-            // Right-align the end marker so it doesn't overflow
-            if (h == 24) pos = totalBarWidth - label.Length;
-            for (var i = 0; i < label.Length && pos + i < totalBarWidth; i++)
-                labelChars[pos + i] = label[i];
-        }
-
-        // Position the time label above the selection midpoint
-        var midPos = (selStartPos + selEndPos) / 2;
-        var timeLabelStart = Math.Max(0, Math.Min(midPos - timeLabel.Length / 2, totalBarWidth - timeLabel.Length));
-        var topLine = new string(' ', timeLabelStart) + timeLabel;
-
-        // Build bar markup with colored segments (alternating colors for adjacent blocks)
-        var barMarkup = new StringBuilder();
-        var currentState = -1;
-        var currentBlockIndex = -1;
-        for (var i = 0; i < totalBarWidth; i++)
-        {
-            var needNewTag = pixelState[i] != currentState ||
-                             (pixelState[i] == 1 && pixelBlockIndex[i] != currentBlockIndex);
-            if (needNewTag)
-            {
-                if (currentState >= 0) barMarkup.Append("[/]");
-                currentState = pixelState[i];
-                currentBlockIndex = pixelBlockIndex[i];
-                barMarkup.Append(currentState switch
-                {
-                    1 => currentBlockIndex >= 0 && currentBlockIndex < sorted.Count && sorted[currentBlockIndex].IsUnpaid
-                            ? "[grey50]"
-                            : currentBlockIndex % 2 == 0 ? "[orangered1]" : "[orange3]",
-                    2 => "[bold yellow]",
-                    3 => "[bold white]",
-                    _ => "[dim]"
-                });
-            }
-            barMarkup.Append(currentState switch
-            {
-                0 => '─',
-                3 => '▒',
-                _ => '█'
-            });
-        }
-        if (currentState >= 0) barMarkup.Append("[/]");
-
-        // Center the bar within the panel width
-        var pad = Math.Max(0, (barWidth - totalBarWidth) / 2);
-        var padStr = new string(' ', pad);
-
-        var timelineContent = new Rows(
-            new Markup($"[bold]{Markup.Escape(padStr + topLine)}[/]"),
-            new Markup(padStr + barMarkup.ToString()),
-            new Markup($"[dim]{Markup.Escape(padStr + new string(labelChars))}[/]"));
-
-        layout["Timeline"].Update(
-            new Panel(timelineContent)
-                .Header("Timeline")
-                .Expand()
-                .Border(BoxBorder.Rounded));
-
-        // Messages pane: show booked blocks sorted chronologically with scrolling
-        var consoleHeight = System.Console.WindowHeight;
-        var messagesHeight = Math.Max(1, consoleHeight - 10 - 2); // 10 = fixed panes (5+4+1), 2 = panel border
-        var sortedBlocks = sorted;
-
-        // Clamp scroll offset to valid range and reserve lines for scroll indicators
-        var availableLines = messagesHeight;
-        var clampedOffset = Math.Clamp(logScrollOffset, 0, Math.Max(0, sortedBlocks.Count - 1));
-
-        var hasMoreAbove = clampedOffset > 0;
-        if (hasMoreAbove) availableLines--;
-
-        var hasMoreBelow = clampedOffset + availableLines < sortedBlocks.Count;
-        if (hasMoreBelow) availableLines--;
-
-        availableLines = Math.Max(1, availableLines);
-        // Re-clamp offset so we don't scroll past the end
-        var maxScrollOffset = Math.Max(0, sortedBlocks.Count - availableLines);
-        clampedOffset = Math.Min(clampedOffset, maxScrollOffset);
-        // Recalculate indicators after clamping
-        hasMoreAbove = clampedOffset > 0;
-        hasMoreBelow = clampedOffset + availableLines < sortedBlocks.Count;
-
-        var visibleBlocks = sortedBlocks.Skip(clampedOffset).Take(availableLines).ToList();
-
-        IRenderable messagesContent;
-        if (visibleBlocks.Count == 0)
-        {
-            messagesContent = new Markup("[dim]No entries yet. Select a time range and press Enter.[/]");
-        }
-        else
-        {
-            var renderables = new List<IRenderable>();
-            if (hasMoreAbove)
-                renderables.Add(new Markup($"[dim]  ▲ {clampedOffset} more above (PgUp)[/]"));
-            foreach (var b in visibleBlocks)
-            {
-                var timeRange = SlotTime.FormatRange(b.StartSlot, b.StartSlot + b.Length);
-                var escaped = Markup.Escape(b.Label);
-                var isSelected = selectedBlock != null && b.StartSlot == selectedBlock.StartSlot && b.Length == selectedBlock.Length;
-                var blockIdx = sorted.IndexOf(b);
-                var squareColor = isSelected
-                    ? "white"
-                    : b.IsUnpaid
-                        ? "grey50"
-                        : blockIdx % 2 == 0 ? "orangered1" : "orange3";
-                var durationText = Duration.Humanize(b.Length * 15);
-                var ticketDisplay = string.IsNullOrEmpty(b.Ticket) ? "" : $"[cyan]{Markup.Escape(b.Ticket)}[/] ";
-                renderables.Add(new Markup($"[{squareColor}]■[/] [bold]{timeRange}[/] {ticketDisplay}{escaped} [dim grey]{durationText}[/]"));
-            }
-            if (hasMoreBelow)
-            {
-                var belowCount = sortedBlocks.Count - clampedOffset - availableLines;
-                renderables.Add(new Markup($"[dim]  ▼ {belowCount} more below (PgDn)[/]"));
-            }
-            messagesContent = new Rows(renderables);
-        }
-
-        if (showHelp)
-        {
-            var version = Assembly.GetExecutingAssembly()
-                .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "0.0.0";
-            var titleLine = new Markup($"[bold][red]p[/][orangered1]u[/][darkorange]n[/][orange3]c[/][orange1]h[/][/] [dim]v{Markup.Escape(version)}[/]");
-            var helpText = new Markup(
-                "[bold]Left/Right[/]  Move cursor / Jump between blocks\n" +
-                "[bold]Up/Down[/]     Resize selection\n" +
-                "[bold]PgUp/PgDn[/]   Scroll time log\n" +
-                "[bold]Enter[/]       Log time entry\n" +
-                "[bold]Tab[/]         Switch input field\n" +
-                "[bold]Ctrl+E[/]      Edit selected entry\n" +
-                "[bold]Ctrl+D[/]      Delete selected entry\n" +
-                "[bold]Ctrl+Q, Q[/]   Quit\n" +
-                "[bold]?[/]           Toggle this help\n" +
-                "[bold]F3[/]          Ticket summary");
-            var helpContent = new Rows(
-                Align.Center(titleLine),
-                new Text(" "),
-                helpText);
-            var helpPanel = new Panel(helpContent)
-                .Border(BoxBorder.Rounded)
-                .Expand();
-            layout["Messages"].Update(
-                new Panel(Align.Center(helpPanel, VerticalAlignment.Middle))
-                    .Expand()
-                    .NoBorder());
-        }
-        else if (showTicketSummary)
-        {
-            var ticketGroups = bookedBlocks
-                .GroupBy(b => string.IsNullOrEmpty(b.Ticket) ? "" : b.Ticket)
-                .Select(g => new { Ticket = g.Key, TotalMinutes = g.Sum(b => b.Length * 15) })
-                .OrderBy(g => g.Ticket == "" ? 1 : 0)
-                .ThenBy(g => g.Ticket)
-                .ToList();
-
-            var summaryLines = new List<IRenderable>();
-            foreach (var g in ticketGroups)
-            {
-                var dur = Duration.Humanize(g.TotalMinutes);
-                var visibleName = g.Ticket == "" ? "Other" : g.Ticket;
-                var paddedName = visibleName.PadRight(20);
-                var ticketLabel = g.Ticket == "" ? $"[dim]{paddedName}[/]" : $"[cyan]{Markup.Escape(paddedName)}[/]";
-                summaryLines.Add(new Markup($"  {ticketLabel} {dur}"));
-            }
-
-            var totalDur = Duration.HumanizeTotal(bookedBlocks.Sum(b => b.Length * 15));
-            summaryLines.Add(new Markup($"  [dim]{new string('─', 28)}[/]"));
-            summaryLines.Add(new Markup($"  [bold]{"Total".PadRight(20)} {totalDur}[/]"));
-
-            var summaryPanel = new Panel(new Rows(summaryLines))
-                .Header("Ticket Summary")
-                .Border(BoxBorder.Rounded)
-                .Expand();
-            layout["Messages"].Update(
-                new Panel(Align.Center(summaryPanel, VerticalAlignment.Middle))
-                    .Expand()
-                    .NoBorder());
-        }
-        else
-        {
-            layout["Messages"].Update(
-                new Panel(messagesContent)
-                    .Header("Time Logged")
-                    .Expand()
-                    .Border(BoxBorder.Rounded));
-        }
-
-        // Input pane
-        if (confirming)
-        {
-            layout["Input"].Update(
-                new Panel(new Markup("[bold yellow]Press Q again to quit[/]"))
-                    .Expand()
-                    .Border(BoxBorder.Rounded));
-        }
-        else if (confirmingDelete)
-        {
-            layout["Input"].Update(
-                new Panel(new Markup("[bold yellow]Press D again to delete[/]"))
-                    .Expand()
-                    .Border(BoxBorder.Rounded));
-        }
-        else if (selectedBlock != null && editing)
-        {
-            var descLine = RenderFieldLine("Description", inputBuffer, inputCursor, activeField == 0);
-            var tickLine = RenderFieldLine("Ticket", ticketBuffer, ticketCursor, activeField == 1);
-            layout["Input"].Update(
-                new Panel(new Rows(new Markup(descLine), new Markup(tickLine)))
-                    .Header("Input [cyan](editing)[/]")
-                    .Expand()
-                    .Border(BoxBorder.Rounded));
-        }
-        else if (selectedBlock != null)
-        {
-            var labelText = Markup.Escape(selectedBlock.Label);
-            var ticketText = Markup.Escape(selectedBlock.Ticket);
-            var descLine = $"[bold]Description:[/] {labelText}";
-            var tickLine = $"[bold]Ticket:[/]      {(string.IsNullOrEmpty(ticketText) ? "[dim]none[/]" : ticketText)}";
-            layout["Input"].Update(
-                new Panel(new Rows(new Markup(descLine), new Markup(tickLine)))
-                    .Header("Input")
-                    .Expand()
-                    .Border(BoxBorder.Rounded));
-        }
-        else
-        {
-            var descLine = RenderFieldLine("Description", inputBuffer, inputCursor, activeField == 0);
-            var tickLine = RenderFieldLine("Ticket", ticketBuffer, ticketCursor, activeField == 1);
-            layout["Input"].Update(
-                new Panel(new Rows(new Markup(descLine), new Markup(tickLine)))
-                    .Header("Input")
-                    .Expand()
-                    .Border(BoxBorder.Rounded));
-        }
-
-        // Status bar
-        var totalMinutesAll = bookedBlocks.Where(b => !b.IsUnpaid).Sum(b => b.Length * 15);
-        var totalFormatted = Duration.HumanizeTotal(totalMinutesAll);
-        var percent = totalMinutesAll * 100 / 480;
-        var statusLeftPlain = $"  {filePath}  ?=help F3=summary";
-        var statusRight = $"{totalFormatted}    {percent}% of 8h  ";
-        var padding = Math.Max(0, consoleWidth - statusLeftPlain.Length - statusRight.Length);
-        var statusBar = $"[white on orangered1]  {Markup.Escape(filePath)}  [bold yellow]?=help F3=summary[/]{new string(' ', padding)}[bold white]{Markup.Escape(statusRight)}[/][/]";
-        layout["StatusBar"].Update(new Markup(statusBar));
-    }
-
-    private static string RenderFieldLine(string fieldName, StringBuilder buffer, int cursor, bool isActive)
-    {
-        var paddedName = fieldName.PadRight(11);
-        if (isActive)
-        {
-            var text = buffer.ToString();
-            var beforeCursor = Markup.Escape(text[..cursor]);
-            var cursorChar = cursor < text.Length ? Markup.Escape(text[cursor].ToString()) : " ";
-            var afterCursor = cursor < text.Length ? Markup.Escape(text[(cursor + 1)..]) : "";
-            return $"[bold]{Markup.Escape(paddedName)}:[/] {beforeCursor}[invert]{cursorChar}[/]{afterCursor}";
-        }
-        else
-        {
-            var escaped = Markup.Escape(buffer.ToString());
-            var display = string.IsNullOrEmpty(escaped) ? "[dim]empty[/]" : $"[dim]{escaped}[/]";
-            return $"[dim]{Markup.Escape(paddedName)}:[/] {display}";
-        }
     }
 }

@@ -1,0 +1,363 @@
+using System.Reflection;
+using System.Text;
+using Spectre.Console;
+using Spectre.Console.Rendering;
+
+namespace Punch.CLI;
+
+// Renders the TUI panes from a PunchSession into the Spectre layout. Pure
+// presentation: it reads session state and never mutates it.
+internal sealed class PunchView
+{
+    private readonly Layout _layout;
+
+    public PunchView(Layout layout)
+    {
+        _layout = layout;
+    }
+
+    public void Render(PunchSession session, bool confirming = false, bool confirmingDelete = false)
+    {
+        RenderTimeline(session);
+        RenderMessages(session);
+        RenderInput(session, confirming, confirmingDelete);
+        RenderStatusBar(session);
+    }
+
+    private void RenderTimeline(PunchSession session)
+    {
+        var cursorSlot = session.CursorSlot;
+        var selectionLength = session.SelectionLength;
+        var selectedBlock = session.SelectedBlock;
+
+        var consoleWidth = System.Console.WindowWidth;
+        var barWidth = Math.Max(1, consoleWidth - 4); // account for panel border + padding
+        var endSlot = cursorSlot + selectionLength;
+        var timeLabel = SlotTime.FormatRange(cursorSlot, endSlot);
+
+        var sorted = session.Blocks.OrderBy(b => b.StartSlot).ToList();
+
+        // Build the bar line: mark booked slots, then overlay selection
+        // Fixed pixels-per-slot for uniform block widths
+        var pixelsPerSlot = Math.Max(1, barWidth / 96);
+        var totalBarWidth = pixelsPerSlot * 96;
+        var pixelState = new int[totalBarWidth]; // 0=free, 1=booked, 2=selected, 3=selected-existing
+        var pixelBlockIndex = new int[totalBarWidth];
+        Array.Fill(pixelBlockIndex, -1);
+        for (var blockIdx = 0; blockIdx < sorted.Count; blockIdx++)
+        {
+            var block = sorted[blockIdx];
+            var bStart = block.StartSlot * pixelsPerSlot;
+            var bEndExcl = (block.StartSlot + block.Length) * pixelsPerSlot;
+            bStart = Math.Clamp(bStart, 0, totalBarWidth);
+            bEndExcl = Math.Clamp(bEndExcl, bStart, totalBarWidth);
+            for (var px = bStart; px < bEndExcl; px++)
+            {
+                pixelState[px] = 1;
+                pixelBlockIndex[px] = blockIdx;
+            }
+        }
+
+        var selStartPos = cursorSlot * pixelsPerSlot;
+        var selEndExcl = endSlot * pixelsPerSlot;
+        if (selEndExcl == selStartPos) selEndExcl = selStartPos + 1;
+        selStartPos = Math.Clamp(selStartPos, 0, totalBarWidth - 1);
+        var selEndPos = Math.Clamp(selEndExcl - 1, selStartPos, totalBarWidth - 1);
+        // State 3 = selected existing block (cyan), State 2 = free selection (yellow)
+        var selPixelState = selectedBlock != null ? 3 : 2;
+        for (var i = selStartPos; i <= selEndPos; i++)
+            pixelState[i] = selPixelState;
+
+        // Build hour labels line
+        var labelChars = new char[totalBarWidth];
+        Array.Fill(labelChars, ' ');
+        var hourMarkers = new[] { 0, 6, 12, 18, 24 };
+        foreach (var h in hourMarkers)
+        {
+            var pos = h * 4 * pixelsPerSlot;
+            var label = h == 12 ? "12pm" : h < 12 ? $"{h}am" : $"{h - 12}pm";
+            if (h == 0 || h == 24) label = "12am";
+            // Right-align the end marker so it doesn't overflow
+            if (h == 24) pos = totalBarWidth - label.Length;
+            for (var i = 0; i < label.Length && pos + i < totalBarWidth; i++)
+                labelChars[pos + i] = label[i];
+        }
+
+        // Position the time label above the selection midpoint
+        var midPos = (selStartPos + selEndPos) / 2;
+        var timeLabelStart = Math.Max(0, Math.Min(midPos - timeLabel.Length / 2, totalBarWidth - timeLabel.Length));
+        var topLine = new string(' ', timeLabelStart) + timeLabel;
+
+        // Build bar markup with colored segments (alternating colors for adjacent blocks)
+        var barMarkup = new StringBuilder();
+        var currentState = -1;
+        var currentBlockIndex = -1;
+        for (var i = 0; i < totalBarWidth; i++)
+        {
+            var needNewTag = pixelState[i] != currentState ||
+                             (pixelState[i] == 1 && pixelBlockIndex[i] != currentBlockIndex);
+            if (needNewTag)
+            {
+                if (currentState >= 0) barMarkup.Append("[/]");
+                currentState = pixelState[i];
+                currentBlockIndex = pixelBlockIndex[i];
+                barMarkup.Append(currentState switch
+                {
+                    1 => currentBlockIndex >= 0 && currentBlockIndex < sorted.Count && sorted[currentBlockIndex].IsUnpaid
+                            ? "[grey50]"
+                            : currentBlockIndex % 2 == 0 ? "[orangered1]" : "[orange3]",
+                    2 => "[bold yellow]",
+                    3 => "[bold white]",
+                    _ => "[dim]"
+                });
+            }
+            barMarkup.Append(currentState switch
+            {
+                0 => '─',
+                3 => '▒',
+                _ => '█'
+            });
+        }
+        if (currentState >= 0) barMarkup.Append("[/]");
+
+        // Center the bar within the panel width
+        var pad = Math.Max(0, (barWidth - totalBarWidth) / 2);
+        var padStr = new string(' ', pad);
+
+        var timelineContent = new Rows(
+            new Markup($"[bold]{Markup.Escape(padStr + topLine)}[/]"),
+            new Markup(padStr + barMarkup.ToString()),
+            new Markup($"[dim]{Markup.Escape(padStr + new string(labelChars))}[/]"));
+
+        _layout["Timeline"].Update(
+            new Panel(timelineContent)
+                .Header("Timeline")
+                .Expand()
+                .Border(BoxBorder.Rounded));
+    }
+
+    private void RenderMessages(PunchSession session)
+    {
+        if (session.ShowHelp)
+            _layout["Messages"].Update(BuildHelpPanel());
+        else if (session.ShowTicketSummary)
+            _layout["Messages"].Update(BuildTicketSummaryPanel(session));
+        else
+            _layout["Messages"].Update(BuildLogPanel(session));
+    }
+
+    private static IRenderable BuildLogPanel(PunchSession session)
+    {
+        var selectedBlock = session.SelectedBlock;
+        var sorted = session.Blocks.OrderBy(b => b.StartSlot).ToList();
+
+        // Messages pane: show booked blocks sorted chronologically with scrolling
+        var consoleHeight = System.Console.WindowHeight;
+        var messagesHeight = Math.Max(1, consoleHeight - 10 - 2); // 10 = fixed panes (5+4+1), 2 = panel border
+
+        // Clamp scroll offset to valid range and reserve lines for scroll indicators
+        var availableLines = messagesHeight;
+        var clampedOffset = Math.Clamp(session.LogScrollOffset, 0, Math.Max(0, sorted.Count - 1));
+
+        var hasMoreAbove = clampedOffset > 0;
+        if (hasMoreAbove) availableLines--;
+
+        var hasMoreBelow = clampedOffset + availableLines < sorted.Count;
+        if (hasMoreBelow) availableLines--;
+
+        availableLines = Math.Max(1, availableLines);
+        // Re-clamp offset so we don't scroll past the end
+        var maxScrollOffset = Math.Max(0, sorted.Count - availableLines);
+        clampedOffset = Math.Min(clampedOffset, maxScrollOffset);
+        // Recalculate indicators after clamping
+        hasMoreAbove = clampedOffset > 0;
+        hasMoreBelow = clampedOffset + availableLines < sorted.Count;
+
+        var visibleBlocks = sorted.Skip(clampedOffset).Take(availableLines).ToList();
+
+        IRenderable messagesContent;
+        if (visibleBlocks.Count == 0)
+        {
+            messagesContent = new Markup("[dim]No entries yet. Select a time range and press Enter.[/]");
+        }
+        else
+        {
+            var renderables = new List<IRenderable>();
+            if (hasMoreAbove)
+                renderables.Add(new Markup($"[dim]  ▲ {clampedOffset} more above (PgUp)[/]"));
+            foreach (var b in visibleBlocks)
+            {
+                var timeRange = SlotTime.FormatRange(b.StartSlot, b.StartSlot + b.Length);
+                var escaped = Markup.Escape(b.Label);
+                var isSelected = selectedBlock != null && b.StartSlot == selectedBlock.StartSlot && b.Length == selectedBlock.Length;
+                var blockIdx = sorted.IndexOf(b);
+                var squareColor = isSelected
+                    ? "white"
+                    : b.IsUnpaid
+                        ? "grey50"
+                        : blockIdx % 2 == 0 ? "orangered1" : "orange3";
+                var durationText = Duration.Humanize(b.Length * 15);
+                var ticketDisplay = string.IsNullOrEmpty(b.Ticket) ? "" : $"[cyan]{Markup.Escape(b.Ticket)}[/] ";
+                renderables.Add(new Markup($"[{squareColor}]■[/] [bold]{timeRange}[/] {ticketDisplay}{escaped} [dim grey]{durationText}[/]"));
+            }
+            if (hasMoreBelow)
+            {
+                var belowCount = sorted.Count - clampedOffset - availableLines;
+                renderables.Add(new Markup($"[dim]  ▼ {belowCount} more below (PgDn)[/]"));
+            }
+            messagesContent = new Rows(renderables);
+        }
+
+        return new Panel(messagesContent)
+            .Header("Time Logged")
+            .Expand()
+            .Border(BoxBorder.Rounded);
+    }
+
+    private static IRenderable BuildHelpPanel()
+    {
+        var version = Assembly.GetExecutingAssembly()
+            .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "0.0.0";
+        var titleLine = new Markup($"[bold][red]p[/][orangered1]u[/][darkorange]n[/][orange3]c[/][orange1]h[/][/] [dim]v{Markup.Escape(version)}[/]");
+        var helpText = new Markup(
+            "[bold]Left/Right[/]  Move cursor / Jump between blocks\n" +
+            "[bold]Up/Down[/]     Resize selection\n" +
+            "[bold]PgUp/PgDn[/]   Scroll time log\n" +
+            "[bold]Enter[/]       Log time entry\n" +
+            "[bold]Tab[/]         Switch input field\n" +
+            "[bold]Ctrl+E[/]      Edit selected entry\n" +
+            "[bold]Ctrl+D[/]      Delete selected entry\n" +
+            "[bold]Ctrl+Q, Q[/]   Quit\n" +
+            "[bold]?[/]           Toggle this help\n" +
+            "[bold]F3[/]          Ticket summary");
+        var helpContent = new Rows(
+            Align.Center(titleLine),
+            new Text(" "),
+            helpText);
+        var helpPanel = new Panel(helpContent)
+            .Border(BoxBorder.Rounded)
+            .Expand();
+        return new Panel(Align.Center(helpPanel, VerticalAlignment.Middle))
+            .Expand()
+            .NoBorder();
+    }
+
+    private static IRenderable BuildTicketSummaryPanel(PunchSession session)
+    {
+        var blocks = session.Blocks;
+        var ticketGroups = blocks
+            .GroupBy(b => string.IsNullOrEmpty(b.Ticket) ? "" : b.Ticket)
+            .Select(g => new { Ticket = g.Key, TotalMinutes = g.Sum(b => b.Length * 15) })
+            .OrderBy(g => g.Ticket == "" ? 1 : 0)
+            .ThenBy(g => g.Ticket)
+            .ToList();
+
+        var summaryLines = new List<IRenderable>();
+        foreach (var g in ticketGroups)
+        {
+            var dur = Duration.Humanize(g.TotalMinutes);
+            var visibleName = g.Ticket == "" ? "Other" : g.Ticket;
+            var paddedName = visibleName.PadRight(20);
+            var ticketLabel = g.Ticket == "" ? $"[dim]{paddedName}[/]" : $"[cyan]{Markup.Escape(paddedName)}[/]";
+            summaryLines.Add(new Markup($"  {ticketLabel} {dur}"));
+        }
+
+        var totalDur = Duration.HumanizeTotal(blocks.Sum(b => b.Length * 15));
+        summaryLines.Add(new Markup($"  [dim]{new string('─', 28)}[/]"));
+        summaryLines.Add(new Markup($"  [bold]{"Total".PadRight(20)} {totalDur}[/]"));
+
+        var summaryPanel = new Panel(new Rows(summaryLines))
+            .Header("Ticket Summary")
+            .Border(BoxBorder.Rounded)
+            .Expand();
+        return new Panel(Align.Center(summaryPanel, VerticalAlignment.Middle))
+            .Expand()
+            .NoBorder();
+    }
+
+    private void RenderInput(PunchSession session, bool confirming, bool confirmingDelete)
+    {
+        var selectedBlock = session.SelectedBlock;
+        var editing = session.Editing;
+
+        if (confirming)
+        {
+            _layout["Input"].Update(
+                new Panel(new Markup("[bold yellow]Press Q again to quit[/]"))
+                    .Expand()
+                    .Border(BoxBorder.Rounded));
+        }
+        else if (confirmingDelete)
+        {
+            _layout["Input"].Update(
+                new Panel(new Markup("[bold yellow]Press D again to delete[/]"))
+                    .Expand()
+                    .Border(BoxBorder.Rounded));
+        }
+        else if (selectedBlock != null && editing)
+        {
+            var descLine = RenderFieldLine("Description", session.InputBuffer, session.InputCursor, session.ActiveField == 0);
+            var tickLine = RenderFieldLine("Ticket", session.TicketBuffer, session.TicketCursor, session.ActiveField == 1);
+            _layout["Input"].Update(
+                new Panel(new Rows(new Markup(descLine), new Markup(tickLine)))
+                    .Header("Input [cyan](editing)[/]")
+                    .Expand()
+                    .Border(BoxBorder.Rounded));
+        }
+        else if (selectedBlock != null)
+        {
+            var labelText = Markup.Escape(selectedBlock.Label);
+            var ticketText = Markup.Escape(selectedBlock.Ticket);
+            var descLine = $"[bold]Description:[/] {labelText}";
+            var tickLine = $"[bold]Ticket:[/]      {(string.IsNullOrEmpty(ticketText) ? "[dim]none[/]" : ticketText)}";
+            _layout["Input"].Update(
+                new Panel(new Rows(new Markup(descLine), new Markup(tickLine)))
+                    .Header("Input")
+                    .Expand()
+                    .Border(BoxBorder.Rounded));
+        }
+        else
+        {
+            var descLine = RenderFieldLine("Description", session.InputBuffer, session.InputCursor, session.ActiveField == 0);
+            var tickLine = RenderFieldLine("Ticket", session.TicketBuffer, session.TicketCursor, session.ActiveField == 1);
+            _layout["Input"].Update(
+                new Panel(new Rows(new Markup(descLine), new Markup(tickLine)))
+                    .Header("Input")
+                    .Expand()
+                    .Border(BoxBorder.Rounded));
+        }
+    }
+
+    private void RenderStatusBar(PunchSession session)
+    {
+        var consoleWidth = System.Console.WindowWidth;
+        var filePath = session.FilePath;
+        var totalMinutesAll = session.Blocks.Where(b => !b.IsUnpaid).Sum(b => b.Length * 15);
+        var totalFormatted = Duration.HumanizeTotal(totalMinutesAll);
+        var percent = totalMinutesAll * 100 / 480;
+        var statusLeftPlain = $"  {filePath}  ?=help F3=summary";
+        var statusRight = $"{totalFormatted}    {percent}% of 8h  ";
+        var padding = Math.Max(0, consoleWidth - statusLeftPlain.Length - statusRight.Length);
+        var statusBar = $"[white on orangered1]  {Markup.Escape(filePath)}  [bold yellow]?=help F3=summary[/]{new string(' ', padding)}[bold white]{Markup.Escape(statusRight)}[/][/]";
+        _layout["StatusBar"].Update(new Markup(statusBar));
+    }
+
+    private static string RenderFieldLine(string fieldName, StringBuilder buffer, int cursor, bool isActive)
+    {
+        var paddedName = fieldName.PadRight(11);
+        if (isActive)
+        {
+            var text = buffer.ToString();
+            var beforeCursor = Markup.Escape(text[..cursor]);
+            var cursorChar = cursor < text.Length ? Markup.Escape(text[cursor].ToString()) : " ";
+            var afterCursor = cursor < text.Length ? Markup.Escape(text[(cursor + 1)..]) : "";
+            return $"[bold]{Markup.Escape(paddedName)}:[/] {beforeCursor}[invert]{cursorChar}[/]{afterCursor}";
+        }
+        else
+        {
+            var escaped = Markup.Escape(buffer.ToString());
+            var display = string.IsNullOrEmpty(escaped) ? "[dim]empty[/]" : $"[dim]{escaped}[/]";
+            return $"[dim]{Markup.Escape(paddedName)}:[/] {display}";
+        }
+    }
+}

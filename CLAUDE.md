@@ -18,11 +18,18 @@ dotnet run --project src/Punch.CLI -- --version           # Show version
 dotnet run --project src/Punch.CLI -- --date 2026-05-04   # Open a specific date
 ```
 
+The TUI reads keys via `Console.ReadKey`, so it can't be driven by piped stdin or unit tests. To smoke-test interactively, drive the built dll through a **raw-mode** pseudo-terminal (Python `pty` + `tty.setraw` on both fds) — in cooked mode Ctrl+Q (XON) is swallowed by flow control. Run the dll directly to skip `dotnet run` chatter, and set `HOME` to a temp dir to isolate `~/.punch`.
+
 ## Architecture
 
-Two-project .NET 10 solution (`Punch.slnx`): the `Punch.CLI` console app (`src/Punch.CLI/`, Spectre.Console.Cli for command parsing and TUI rendering) and `Punch.CLI.Tests` (`tests/Punch.CLI.Tests/`, xUnit). All app types live in a single `Program.cs`. The CLI project exposes its internals to the test project via `<InternalsVisibleTo Include="Punch.CLI.Tests" />` — tests reference `PunchStorage`, `TimeBlock`, etc. directly.
+Two-project .NET 10 solution (`Punch.slnx`): the `Punch.CLI` console app (`src/Punch.CLI/`, Spectre.Console.Cli for command parsing and TUI rendering) and `Punch.CLI.Tests` (`tests/Punch.CLI.Tests/`, xUnit). One type per file. The CLI project exposes its internals to the test project via `<InternalsVisibleTo Include="Punch.CLI.Tests" />` — tests reference `PunchStorage`, `TimeBlock`, `DaySchedule`, etc. directly.
 
-- **`PunchCommand`** — default command; renders a full-screen alternate buffer TUI with timeline, entry list, input, and status bar via `AnsiConsole.Live`. The `Execute` method contains the entire TUI event loop — keyboard input is processed in a `while(true)` loop with `Console.ReadKey`, mutating local state variables and calling `UpdateLayout` after each keypress.
+- **`PunchCommand`** — thin default command (~80 lines): parses args, loads the day, sets up the `AnsiConsole.Live` full-screen TUI, then hands off to `PunchController`.
+- **`PunchController`** — owns the `while(true)` keyboard loop (`Console.ReadKey`); `Run` dispatches each key to a named handler (`HandleLeftArrow`, `HandleGrow`, `HandleEditStart`, `HandleEnter`, `HandleTextInput`, …) that mutates the `PunchSession`, then persists and re-renders.
+- **`PunchSession`** — mutable editor state (input fields, cursor/selection, view toggles) plus the `DaySchedule`. `ActiveBuffer`/`ActiveCursor` route input to the focused field; `ResetInput` clears it.
+- **`DaySchedule`** — aggregate owning the block list **and** the 96-slot `occupied[]` mask as an invariant. The ONLY place occupancy is mutated — never touch a raw `occupied[]` outside it. Exposes `Add/Remove/Replace/FindAt/IsFree/IsOverlapping/CanGrow/AdvanceAfterAdd`, plus `FreeSlots`/`FillSlots` for the Ctrl+E edit lift.
+- **`PunchView`** — all Spectre rendering, split into `RenderTimeline/Messages/Help/TicketSummary/Input/StatusBar`, driven by the `PunchSession`.
+- **`SlotTime` / `Duration`** — slot↔clock-time conversion and human-readable duration formatting (`Humanize` for entries, `HumanizeTotal` for totals).
 - **`PunchCommandSettings`** — CLI options: `--version`/`-v`, `--date`/`-d` (yyyy-MM-dd override).
 - **`TimeBlock`** — immutable record representing a booked time slot (StartSlot, Length, Label, Ticket). Slots are 0–95 (96 quarter-hours in a day). Ticket is optional (defaults to `""`). The `IsUnpaid` computed property (case-insensitive "lunch" or "break" substring match on Label) is used to exclude lunch and break blocks from the workday total.
 - **`PunchStorage`** — static helper for JSON persistence. One file per day at `~/.punch/data/yyyy-MM-dd.json` (override via `DataDirectoryOverride` — used by tests to isolate to a temp dir). Auto-saves on every add, edit, and delete. Validates blocks on load (skips invalid ranges and overlaps).
@@ -30,18 +37,19 @@ Two-project .NET 10 solution (`Punch.slnx`): the `Punch.CLI` console app (`src/P
 
 ### TUI State Model
 
-The TUI has three modes driven by local variables in the event loop:
+The TUI has three modes driven by `PunchSession` state, handled in `PunchController`:
 1. **Free cursor** (`selectedBlock == null, !editing`) — arrow keys move cursor/resize selection, typing fills the input buffer, Enter books a new block.
 2. **Block selected** (`selectedBlock != null, !editing`) — navigating onto a booked block selects it. Ctrl+E enters edit mode, Ctrl+D deletes.
 3. **Editing** (`selectedBlock != null, editing`) — input buffer is pre-filled with the block's label and ticket; Enter saves the edit (description must be non-empty).
 
-The input panel has two stacked fields (Description and Ticket) with Tab to switch focus. The active field shows a bold label and inverted cursor; the inactive field is dimmed. Ticket input is auto-uppercased. The `activeField` variable (0=Description, 1=Ticket) tracks focus, and `currentBuffer`/`currentCursor` aliases route keyboard input to the correct field.
+The input panel has two stacked fields (Description and Ticket) with Tab to switch focus. The active field shows a bold label and inverted cursor; the inactive field is dimmed. Ticket input is auto-uppercased. `PunchSession.ActiveField` (0=Description, 1=Ticket) tracks focus; `ActiveBuffer`/`ActiveCursor` route input to it.
 
-The timeline bar in `UpdateLayout` maps 96 quarter-hour slots to pixel positions using a fixed `pixelsPerSlot` ratio, with alternating orange colors for adjacent blocks and yellow/white for the current selection.
+`PunchView.RenderTimeline` maps 96 quarter-hour slots to pixel positions using a fixed `pixelsPerSlot` ratio, with alternating orange colors for adjacent blocks and yellow/white for the current selection.
 
 ## Conventions
 
 - File-scoped namespaces (`namespace Punch.CLI;`)
+- One type per file
 - No top-level statements — always use `Program.Main`
 - `internal sealed` for non-public command classes
 - Version set in csproj `<Version>` property; `IncludeSourceRevisionInInformationalVersion` is disabled

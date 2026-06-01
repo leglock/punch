@@ -6,27 +6,27 @@ namespace Punch.CLI.Tests;
 public class ResizeTests
 {
     [Fact]
-    public void CanGrowBlock_AllowsGrowthIntoFreeSlot()
+    public void CanGrow_AllowsGrowthIntoFreeSlot()
     {
-        var occupied = new bool[96];
-        for (var s = 32; s < 36; s++) occupied[s] = true;
-        Assert.True(PunchCommand.CanGrowBlock(32, 4, occupied));
+        var schedule = new DaySchedule(new[] { new TimeBlock(32, 4, "block", "") });
+        Assert.True(schedule.CanGrow(32, 4));
     }
 
     [Fact]
-    public void CanGrowBlock_BlocksGrowthIntoOccupiedSlot()
+    public void CanGrow_BlocksGrowthIntoOccupiedSlot()
     {
-        var occupied = new bool[96];
-        for (var s = 32; s < 36; s++) occupied[s] = true;
-        occupied[36] = true;
-        Assert.False(PunchCommand.CanGrowBlock(32, 4, occupied));
+        var schedule = new DaySchedule(new[]
+        {
+            new TimeBlock(32, 4, "block", ""),
+            new TimeBlock(36, 1, "neighbour", ""),
+        });
+        Assert.False(schedule.CanGrow(32, 4));
     }
 
     [Fact]
-    public void CanGrowBlock_BlocksGrowthPastSlot96()
+    public void CanGrow_BlocksGrowthPastSlot96()
     {
-        var occupied = new bool[96];
-        for (var s = 92; s < 96; s++) occupied[s] = true;
-        Assert.False(PunchCommand.CanGrowBlock(92, 4, occupied));
+        var schedule = new DaySchedule(new[] { new TimeBlock(92, 4, "block", "") });
+        Assert.False(schedule.CanGrow(92, 4));
     }
 }

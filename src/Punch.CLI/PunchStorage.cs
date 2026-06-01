@@ -74,7 +74,7 @@ internal static class PunchStorage
         }
     }
 
-    public static void Save(DateOnly date, List<TimeBlock> blocks)
+    public static void Save(DateOnly date, IReadOnlyList<TimeBlock> blocks)
     {
         var dir = GetDataDirectory();
         Directory.CreateDirectory(dir);

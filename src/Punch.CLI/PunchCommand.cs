@@ -39,10 +39,10 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
         var ticketCursor = 0;
         var activeField = 0; // 0 = Description, 1 = Ticket
         var selectionLength = 1; // number of 15-min slots selected (min 1)
-        List<TimeBlock> bookedBlocks;
+        DaySchedule schedule;
         try
         {
-            bookedBlocks = PunchStorage.Load(workingDate);
+            schedule = new DaySchedule(PunchStorage.Load(workingDate));
         }
         catch (Exception ex)
         {
@@ -50,13 +50,10 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
             AnsiConsole.MarkupLine($"[bold yellow]Reason:[/] {Markup.Escape(ex.Message)}");
             return 1;
         }
-        var occupied = new bool[96];
-        foreach (var block in bookedBlocks)
-            for (var s = block.StartSlot; s < block.StartSlot + block.Length; s++)
-                occupied[s] = true;
+        var bookedBlocks = schedule.Blocks;
 
         var cursorSlot = 34; // default to 8:30am
-        if (bookedBlocks.Count > 0)
+        if (schedule.Count > 0)
         {
             var lastEnd = bookedBlocks.Max(b => b.StartSlot + b.Length);
             if (lastEnd < 96)
@@ -83,7 +80,7 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
 
             AnsiConsole.Live(layout).Start(ctx =>
             {
-                UpdateLayout(layout, bookedBlocks, inputBuffer, filePath, cursorSlot: cursorSlot, selectionLength: selectionLength, occupied: occupied, selectedBlock: selectedBlock, editing: editing, showHelp: showHelp, showTicketSummary: showTicketSummary, inputCursor: inputCursor, ticketBuffer: ticketBuffer, ticketCursor: ticketCursor, activeField: activeField, logScrollOffset: logScrollOffset);
+                UpdateLayout(layout, bookedBlocks, inputBuffer, filePath, cursorSlot: cursorSlot, selectionLength: selectionLength, selectedBlock: selectedBlock, editing: editing, showHelp: showHelp, showTicketSummary: showTicketSummary, inputCursor: inputCursor, ticketBuffer: ticketBuffer, ticketCursor: ticketCursor, activeField: activeField, logScrollOffset: logScrollOffset);
                 ctx.Refresh();
 
                 var confirming = false;
@@ -99,7 +96,7 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                             break;
 
                         confirming = false;
-                        UpdateLayout(layout, bookedBlocks, inputBuffer, filePath, cursorSlot: cursorSlot, selectionLength: selectionLength, occupied: occupied, selectedBlock: selectedBlock, editing: editing, showHelp: showHelp, showTicketSummary: showTicketSummary, inputCursor: inputCursor, ticketBuffer: ticketBuffer, ticketCursor: ticketCursor, activeField: activeField, logScrollOffset: logScrollOffset);
+                        UpdateLayout(layout, bookedBlocks, inputBuffer, filePath, cursorSlot: cursorSlot, selectionLength: selectionLength, selectedBlock: selectedBlock, editing: editing, showHelp: showHelp, showTicketSummary: showTicketSummary, inputCursor: inputCursor, ticketBuffer: ticketBuffer, ticketCursor: ticketCursor, activeField: activeField, logScrollOffset: logScrollOffset);
                         ctx.Refresh();
                         continue;
                     }
@@ -108,9 +105,7 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                     {
                         if (key.Key == ConsoleKey.D)
                         {
-                            for (var s = selectedBlock!.StartSlot; s < selectedBlock.StartSlot + selectedBlock.Length; s++)
-                                occupied[s] = false;
-                            bookedBlocks.Remove(selectedBlock);
+                            schedule.Remove(selectedBlock!);
                             PunchStorage.Save(workingDate, bookedBlocks);
                             selectedBlock = null;
                             selectionLength = 1;
@@ -127,7 +122,7 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                             confirmingDelete = false;
                         }
 
-                        UpdateLayout(layout, bookedBlocks, inputBuffer, filePath, cursorSlot: cursorSlot, selectionLength: selectionLength, occupied: occupied, selectedBlock: selectedBlock, editing: editing, showHelp: showHelp, showTicketSummary: showTicketSummary, inputCursor: inputCursor, ticketBuffer: ticketBuffer, ticketCursor: ticketCursor, activeField: activeField, logScrollOffset: logScrollOffset);
+                        UpdateLayout(layout, bookedBlocks, inputBuffer, filePath, cursorSlot: cursorSlot, selectionLength: selectionLength, selectedBlock: selectedBlock, editing: editing, showHelp: showHelp, showTicketSummary: showTicketSummary, inputCursor: inputCursor, ticketBuffer: ticketBuffer, ticketCursor: ticketCursor, activeField: activeField, logScrollOffset: logScrollOffset);
                         ctx.Refresh();
                         continue;
                     }
@@ -135,7 +130,7 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                     if (key.Key == ConsoleKey.Q && key.Modifiers.HasFlag(ConsoleModifiers.Control))
                     {
                         confirming = true;
-                        UpdateLayout(layout, bookedBlocks, inputBuffer, filePath, confirming: true, cursorSlot: cursorSlot, selectionLength: selectionLength, occupied: occupied, selectedBlock: selectedBlock, editing: editing, showHelp: showHelp, showTicketSummary: showTicketSummary, inputCursor: inputCursor, ticketBuffer: ticketBuffer, ticketCursor: ticketCursor, activeField: activeField, logScrollOffset: logScrollOffset);
+                        UpdateLayout(layout, bookedBlocks, inputBuffer, filePath, confirming: true, cursorSlot: cursorSlot, selectionLength: selectionLength, selectedBlock: selectedBlock, editing: editing, showHelp: showHelp, showTicketSummary: showTicketSummary, inputCursor: inputCursor, ticketBuffer: ticketBuffer, ticketCursor: ticketCursor, activeField: activeField, logScrollOffset: logScrollOffset);
                         ctx.Refresh();
                         continue;
                     }
@@ -143,7 +138,7 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                     if (showHelp)
                     {
                         showHelp = false;
-                        UpdateLayout(layout, bookedBlocks, inputBuffer, filePath, cursorSlot: cursorSlot, selectionLength: selectionLength, occupied: occupied, selectedBlock: selectedBlock, editing: editing, showHelp: showHelp, showTicketSummary: showTicketSummary, inputCursor: inputCursor, ticketBuffer: ticketBuffer, ticketCursor: ticketCursor, activeField: activeField, logScrollOffset: logScrollOffset);
+                        UpdateLayout(layout, bookedBlocks, inputBuffer, filePath, cursorSlot: cursorSlot, selectionLength: selectionLength, selectedBlock: selectedBlock, editing: editing, showHelp: showHelp, showTicketSummary: showTicketSummary, inputCursor: inputCursor, ticketBuffer: ticketBuffer, ticketCursor: ticketCursor, activeField: activeField, logScrollOffset: logScrollOffset);
                         ctx.Refresh();
                         continue;
                     }
@@ -153,7 +148,7 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                         if (key.Key == ConsoleKey.F3)
                         {
                             showTicketSummary = false;
-                            UpdateLayout(layout, bookedBlocks, inputBuffer, filePath, cursorSlot: cursorSlot, selectionLength: selectionLength, occupied: occupied, selectedBlock: selectedBlock, editing: editing, showHelp: showHelp, showTicketSummary: showTicketSummary, inputCursor: inputCursor, ticketBuffer: ticketBuffer, ticketCursor: ticketCursor, activeField: activeField, logScrollOffset: logScrollOffset);
+                            UpdateLayout(layout, bookedBlocks, inputBuffer, filePath, cursorSlot: cursorSlot, selectionLength: selectionLength, selectedBlock: selectedBlock, editing: editing, showHelp: showHelp, showTicketSummary: showTicketSummary, inputCursor: inputCursor, ticketBuffer: ticketBuffer, ticketCursor: ticketCursor, activeField: activeField, logScrollOffset: logScrollOffset);
                             ctx.Refresh();
                         }
                         continue;
@@ -162,7 +157,7 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                     if (key.Key == ConsoleKey.F3)
                     {
                         showTicketSummary = true;
-                        UpdateLayout(layout, bookedBlocks, inputBuffer, filePath, cursorSlot: cursorSlot, selectionLength: selectionLength, occupied: occupied, selectedBlock: selectedBlock, editing: editing, showHelp: showHelp, showTicketSummary: showTicketSummary, inputCursor: inputCursor, ticketBuffer: ticketBuffer, ticketCursor: ticketCursor, activeField: activeField, logScrollOffset: logScrollOffset);
+                        UpdateLayout(layout, bookedBlocks, inputBuffer, filePath, cursorSlot: cursorSlot, selectionLength: selectionLength, selectedBlock: selectedBlock, editing: editing, showHelp: showHelp, showTicketSummary: showTicketSummary, inputCursor: inputCursor, ticketBuffer: ticketBuffer, ticketCursor: ticketCursor, activeField: activeField, logScrollOffset: logScrollOffset);
                         ctx.Refresh();
                         continue;
                     }
@@ -170,7 +165,7 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                     if (key.KeyChar == '?' && selectedBlock == null && !editing && inputBuffer.Length == 0 && ticketBuffer.Length == 0)
                     {
                         showHelp = !showHelp;
-                        UpdateLayout(layout, bookedBlocks, inputBuffer, filePath, cursorSlot: cursorSlot, selectionLength: selectionLength, occupied: occupied, selectedBlock: selectedBlock, editing: editing, showHelp: showHelp, showTicketSummary: showTicketSummary, inputCursor: inputCursor, ticketBuffer: ticketBuffer, ticketCursor: ticketCursor, activeField: activeField, logScrollOffset: logScrollOffset);
+                        UpdateLayout(layout, bookedBlocks, inputBuffer, filePath, cursorSlot: cursorSlot, selectionLength: selectionLength, selectedBlock: selectedBlock, editing: editing, showHelp: showHelp, showTicketSummary: showTicketSummary, inputCursor: inputCursor, ticketBuffer: ticketBuffer, ticketCursor: ticketCursor, activeField: activeField, logScrollOffset: logScrollOffset);
                         ctx.Refresh();
                         continue;
                     }
@@ -194,8 +189,7 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                         // (they were freed on Ctrl+E to allow live resize).
                         if (editing && selectedBlock != null)
                         {
-                            for (var s = selectedBlock.StartSlot; s < selectedBlock.StartSlot + selectedBlock.Length; s++)
-                                occupied[s] = true;
+                            schedule.FillSlots(selectedBlock);
                         }
                         if (selectedBlock != null)
                         {
@@ -203,7 +197,7 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                             var target = selectedBlock.StartSlot - 1;
                             if (target >= 0)
                             {
-                                var adj = FindBlockAt(target, bookedBlocks);
+                                var adj = schedule.FindAt(target);
                                 if (adj != null)
                                 {
                                     cursorSlot = adj.StartSlot;
@@ -222,14 +216,14 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                         {
                             // Free selection: slide left by 1, keeping length
                             var newStart = cursorSlot - 1;
-                            var adj = FindBlockAt(newStart, bookedBlocks);
+                            var adj = schedule.FindAt(newStart);
                             if (adj != null)
                             {
                                 cursorSlot = adj.StartSlot;
                                 selectionLength = adj.Length;
                                 selectedBlock = adj;
                             }
-                            else if (!occupied[newStart])
+                            else if (schedule.IsFree(newStart))
                             {
                                 cursorSlot = newStart;
                             }
@@ -245,8 +239,7 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                         // (they were freed on Ctrl+E to allow live resize).
                         if (editing && selectedBlock != null)
                         {
-                            for (var s = selectedBlock.StartSlot; s < selectedBlock.StartSlot + selectedBlock.Length; s++)
-                                occupied[s] = true;
+                            schedule.FillSlots(selectedBlock);
                         }
                         if (selectedBlock != null)
                         {
@@ -254,7 +247,7 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                             var target = selectedBlock.StartSlot + selectedBlock.Length;
                             if (target < 96)
                             {
-                                var adj = FindBlockAt(target, bookedBlocks);
+                                var adj = schedule.FindAt(target);
                                 if (adj != null)
                                 {
                                     cursorSlot = adj.StartSlot;
@@ -273,14 +266,14 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                         {
                             // Free selection: slide right by 1, keeping length
                             var newEnd = cursorSlot + selectionLength; // the slot that would become the new last slot
-                            var adj = FindBlockAt(newEnd, bookedBlocks);
+                            var adj = schedule.FindAt(newEnd);
                             if (adj != null)
                             {
                                 cursorSlot = adj.StartSlot;
                                 selectionLength = adj.Length;
                                 selectedBlock = adj;
                             }
-                            else if (!occupied[newEnd])
+                            else if (schedule.IsFree(newEnd))
                             {
                                 cursorSlot++;
                             }
@@ -295,10 +288,10 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                         if (selectedBlock == null)
                         {
                             var newLen = selectionLength + 1;
-                            if (cursorSlot + newLen <= 96 && !IsOverlapping(cursorSlot, newLen, occupied))
+                            if (cursorSlot + newLen <= 96 && !schedule.IsOverlapping(cursorSlot, newLen))
                                 selectionLength = newLen;
                         }
-                        else if (editing && CanGrowBlock(selectedBlock.StartSlot, selectionLength, occupied))
+                        else if (editing && schedule.CanGrow(selectedBlock.StartSlot, selectionLength))
                         {
                             selectionLength++;
                         }
@@ -324,7 +317,7 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                         if (selectedBlock != null)
                         {
                             confirmingDelete = true;
-                            UpdateLayout(layout, bookedBlocks, inputBuffer, filePath, confirmingDelete: true, cursorSlot: cursorSlot, selectionLength: selectionLength, occupied: occupied, selectedBlock: selectedBlock, editing: editing, showHelp: showHelp, showTicketSummary: showTicketSummary, inputCursor: inputCursor, ticketBuffer: ticketBuffer, ticketCursor: ticketCursor, activeField: activeField, logScrollOffset: logScrollOffset);
+                            UpdateLayout(layout, bookedBlocks, inputBuffer, filePath, confirmingDelete: true, cursorSlot: cursorSlot, selectionLength: selectionLength, selectedBlock: selectedBlock, editing: editing, showHelp: showHelp, showTicketSummary: showTicketSummary, inputCursor: inputCursor, ticketBuffer: ticketBuffer, ticketCursor: ticketCursor, activeField: activeField, logScrollOffset: logScrollOffset);
                             ctx.Refresh();
                             continue;
                         }
@@ -339,8 +332,7 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                             editing = true;
                             cursorSlot = selectedBlock.StartSlot;
                             selectionLength = selectedBlock.Length;
-                            for (var s = selectedBlock.StartSlot; s < selectedBlock.StartSlot + selectedBlock.Length; s++)
-                                occupied[s] = false;
+                            schedule.FreeSlots(selectedBlock);
                             inputBuffer.Clear();
                             inputBuffer.Append(selectedBlock.Label);
                             inputCursor = inputBuffer.Length;
@@ -359,17 +351,9 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                             // The block's original slots were freed in occupied[] on Ctrl+E.
                             var newLabel = inputBuffer.ToString();
                             var newTicket = ticketBuffer.ToString();
-                            var idx = bookedBlocks.IndexOf(selectedBlock);
-                            if (idx >= 0)
-                            {
-                                selectedBlock = selectedBlock with { Length = selectionLength, Label = newLabel, Ticket = newTicket };
-                                bookedBlocks[idx] = selectedBlock;
-
-                                for (var s = selectedBlock.StartSlot; s < selectedBlock.StartSlot + selectedBlock.Length; s++)
-                                    occupied[s] = true;
-
-                                PunchStorage.Save(workingDate, bookedBlocks);
-                            }
+                            var edited = selectedBlock with { Length = selectionLength, Label = newLabel, Ticket = newTicket };
+                            selectedBlock = schedule.Replace(selectedBlock, edited);
+                            PunchStorage.Save(workingDate, bookedBlocks);
                             editing = false;
                             inputBuffer.Clear();
                             inputCursor = 0;
@@ -383,9 +367,7 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                             var label = inputBuffer.ToString();
                             var ticket = ticketBuffer.ToString();
                             var block = new TimeBlock(cursorSlot, selectionLength, label, ticket);
-                            bookedBlocks.Add(block);
-                            for (var s = block.StartSlot; s < block.StartSlot + block.Length; s++)
-                                occupied[s] = true;
+                            schedule.Add(block);
                             PunchStorage.Save(workingDate, bookedBlocks);
 
                             inputBuffer.Clear();
@@ -395,7 +377,7 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                             activeField = 0;
                             currentCursor = 0;
 
-                            (cursorSlot, selectionLength, selectedBlock) = AdvanceAfterAdd(cursorSlot, bookedBlocks, occupied);
+                            (cursorSlot, selectionLength, selectedBlock) = schedule.AdvanceAfterAdd(cursorSlot);
                         }
                     }
                     else if (key.Key == ConsoleKey.Backspace)
@@ -473,7 +455,7 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                     var maxOff = Math.Max(0, totalBlocks - (viewHeight - 1));
                     logScrollOffset = Math.Clamp(logScrollOffset, 0, maxOff);
 
-                    UpdateLayout(layout, bookedBlocks, inputBuffer, filePath, cursorSlot: cursorSlot, selectionLength: selectionLength, occupied: occupied, selectedBlock: selectedBlock, editing: editing, showHelp: showHelp, showTicketSummary: showTicketSummary, inputCursor: inputCursor, ticketBuffer: ticketBuffer, ticketCursor: ticketCursor, activeField: activeField, logScrollOffset: logScrollOffset);
+                    UpdateLayout(layout, bookedBlocks, inputBuffer, filePath, cursorSlot: cursorSlot, selectionLength: selectionLength, selectedBlock: selectedBlock, editing: editing, showHelp: showHelp, showTicketSummary: showTicketSummary, inputCursor: inputCursor, ticketBuffer: ticketBuffer, ticketCursor: ticketCursor, activeField: activeField, logScrollOffset: logScrollOffset);
                     ctx.Refresh();
                 }
             });
@@ -487,50 +469,7 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
         return 0;
     }
 
-    private static TimeBlock? FindBlockAt(int slot, List<TimeBlock> blocks)
-    {
-        return blocks.FirstOrDefault(b => slot >= b.StartSlot && slot < b.StartSlot + b.Length);
-    }
-
-    private static bool IsOverlapping(int start, int length, bool[] occupied)
-    {
-        for (var i = start; i < start + length && i < 96; i++)
-            if (occupied[i])
-                return true;
-        return false;
-    }
-
-    internal static bool CanGrowBlock(int startSlot, int currentLength, bool[] occupied)
-    {
-        var next = startSlot + currentLength;
-        return next < 96 && !occupied[next];
-    }
-
-    internal static (int cursorSlot, int selectionLength, TimeBlock? selectedBlock) AdvanceAfterAdd(int cursorSlot, List<TimeBlock> bookedBlocks, bool[] occupied)
-    {
-        var selectionLength = 1;
-        TimeBlock? selectedBlock = null;
-
-        while (cursorSlot < 96 && occupied[cursorSlot])
-            cursorSlot++;
-        if (cursorSlot >= 96)
-        {
-            cursorSlot = 95;
-            if (occupied[95])
-            {
-                var adj = FindBlockAt(95, bookedBlocks);
-                if (adj != null)
-                {
-                    selectionLength = adj.Length;
-                    selectedBlock = adj;
-                }
-            }
-        }
-
-        return (cursorSlot, selectionLength, selectedBlock);
-    }
-
-    private static void UpdateLayout(Layout layout, List<TimeBlock> bookedBlocks, StringBuilder inputBuffer, string filePath, bool confirming = false, bool confirmingDelete = false, int cursorSlot = 0, int selectionLength = 1, bool[]? occupied = null, TimeBlock? selectedBlock = null, bool editing = false, bool showHelp = false, bool showTicketSummary = false, int inputCursor = 0, StringBuilder? ticketBuffer = null, int ticketCursor = 0, int activeField = 0, int logScrollOffset = 0)
+    private static void UpdateLayout(Layout layout, IReadOnlyList<TimeBlock> bookedBlocks, StringBuilder inputBuffer, string filePath, bool confirming = false, bool confirmingDelete = false, int cursorSlot = 0, int selectionLength = 1, TimeBlock? selectedBlock = null, bool editing = false, bool showHelp = false, bool showTicketSummary = false, int inputCursor = 0, StringBuilder? ticketBuffer = null, int ticketCursor = 0, int activeField = 0, int logScrollOffset = 0)
     {
         // Timeline pane
         var consoleWidth = System.Console.WindowWidth;

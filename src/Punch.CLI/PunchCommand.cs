@@ -33,12 +33,6 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
         }
 
         var filePath = PunchStorage.GetDisplayPath(workingDate);
-        var inputBuffer = new StringBuilder();
-        var inputCursor = 0;
-        var ticketBuffer = new StringBuilder();
-        var ticketCursor = 0;
-        var activeField = 0; // 0 = Description, 1 = Ticket
-        var selectionLength = 1; // number of 15-min slots selected (min 1)
         DaySchedule schedule;
         try
         {
@@ -50,20 +44,16 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
             AnsiConsole.MarkupLine($"[bold yellow]Reason:[/] {Markup.Escape(ex.Message)}");
             return 1;
         }
-        var bookedBlocks = schedule.Blocks;
 
         var cursorSlot = 34; // default to 8:30am
         if (schedule.Count > 0)
         {
-            var lastEnd = bookedBlocks.Max(b => b.StartSlot + b.Length);
+            var lastEnd = schedule.Blocks.Max(b => b.StartSlot + b.Length);
             if (lastEnd < 96)
                 cursorSlot = lastEnd;
         }
-        TimeBlock? selectedBlock = null;
-        var editing = false;
-        var showHelp = false;
-        var logScrollOffset = 0;
-        var showTicketSummary = false;
+
+        var session = new PunchSession(schedule, workingDate, filePath, cursorSlot);
 
         AnsiConsole.AlternateScreen(() =>
         {
@@ -80,7 +70,7 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
 
             AnsiConsole.Live(layout).Start(ctx =>
             {
-                UpdateLayout(layout, bookedBlocks, inputBuffer, filePath, cursorSlot: cursorSlot, selectionLength: selectionLength, selectedBlock: selectedBlock, editing: editing, showHelp: showHelp, showTicketSummary: showTicketSummary, inputCursor: inputCursor, ticketBuffer: ticketBuffer, ticketCursor: ticketCursor, activeField: activeField, logScrollOffset: logScrollOffset);
+                UpdateLayout(layout, session);
                 ctx.Refresh();
 
                 var confirming = false;
@@ -96,7 +86,7 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                             break;
 
                         confirming = false;
-                        UpdateLayout(layout, bookedBlocks, inputBuffer, filePath, cursorSlot: cursorSlot, selectionLength: selectionLength, selectedBlock: selectedBlock, editing: editing, showHelp: showHelp, showTicketSummary: showTicketSummary, inputCursor: inputCursor, ticketBuffer: ticketBuffer, ticketCursor: ticketCursor, activeField: activeField, logScrollOffset: logScrollOffset);
+                        UpdateLayout(layout, session);
                         ctx.Refresh();
                         continue;
                     }
@@ -105,16 +95,16 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                     {
                         if (key.Key == ConsoleKey.D)
                         {
-                            schedule.Remove(selectedBlock!);
-                            PunchStorage.Save(workingDate, bookedBlocks);
-                            selectedBlock = null;
-                            selectionLength = 1;
-                            editing = false;
-                            inputBuffer.Clear();
-                            inputCursor = 0;
-                            ticketBuffer.Clear();
-                            ticketCursor = 0;
-                            activeField = 0;
+                            schedule.Remove(session.SelectedBlock!);
+                            PunchStorage.Save(workingDate, schedule.Blocks);
+                            session.SelectedBlock = null;
+                            session.SelectionLength = 1;
+                            session.Editing = false;
+                            session.InputBuffer.Clear();
+                            session.InputCursor = 0;
+                            session.TicketBuffer.Clear();
+                            session.TicketCursor = 0;
+                            session.ActiveField = 0;
                             confirmingDelete = false;
                         }
                         else
@@ -122,7 +112,7 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                             confirmingDelete = false;
                         }
 
-                        UpdateLayout(layout, bookedBlocks, inputBuffer, filePath, cursorSlot: cursorSlot, selectionLength: selectionLength, selectedBlock: selectedBlock, editing: editing, showHelp: showHelp, showTicketSummary: showTicketSummary, inputCursor: inputCursor, ticketBuffer: ticketBuffer, ticketCursor: ticketCursor, activeField: activeField, logScrollOffset: logScrollOffset);
+                        UpdateLayout(layout, session);
                         ctx.Refresh();
                         continue;
                     }
@@ -130,25 +120,25 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                     if (key.Key == ConsoleKey.Q && key.Modifiers.HasFlag(ConsoleModifiers.Control))
                     {
                         confirming = true;
-                        UpdateLayout(layout, bookedBlocks, inputBuffer, filePath, confirming: true, cursorSlot: cursorSlot, selectionLength: selectionLength, selectedBlock: selectedBlock, editing: editing, showHelp: showHelp, showTicketSummary: showTicketSummary, inputCursor: inputCursor, ticketBuffer: ticketBuffer, ticketCursor: ticketCursor, activeField: activeField, logScrollOffset: logScrollOffset);
+                        UpdateLayout(layout, session, confirming: true);
                         ctx.Refresh();
                         continue;
                     }
 
-                    if (showHelp)
+                    if (session.ShowHelp)
                     {
-                        showHelp = false;
-                        UpdateLayout(layout, bookedBlocks, inputBuffer, filePath, cursorSlot: cursorSlot, selectionLength: selectionLength, selectedBlock: selectedBlock, editing: editing, showHelp: showHelp, showTicketSummary: showTicketSummary, inputCursor: inputCursor, ticketBuffer: ticketBuffer, ticketCursor: ticketCursor, activeField: activeField, logScrollOffset: logScrollOffset);
+                        session.ShowHelp = false;
+                        UpdateLayout(layout, session);
                         ctx.Refresh();
                         continue;
                     }
 
-                    if (showTicketSummary)
+                    if (session.ShowTicketSummary)
                     {
                         if (key.Key == ConsoleKey.F3)
                         {
-                            showTicketSummary = false;
-                            UpdateLayout(layout, bookedBlocks, inputBuffer, filePath, cursorSlot: cursorSlot, selectionLength: selectionLength, selectedBlock: selectedBlock, editing: editing, showHelp: showHelp, showTicketSummary: showTicketSummary, inputCursor: inputCursor, ticketBuffer: ticketBuffer, ticketCursor: ticketCursor, activeField: activeField, logScrollOffset: logScrollOffset);
+                            session.ShowTicketSummary = false;
+                            UpdateLayout(layout, session);
                             ctx.Refresh();
                         }
                         continue;
@@ -156,22 +146,22 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
 
                     if (key.Key == ConsoleKey.F3)
                     {
-                        showTicketSummary = true;
-                        UpdateLayout(layout, bookedBlocks, inputBuffer, filePath, cursorSlot: cursorSlot, selectionLength: selectionLength, selectedBlock: selectedBlock, editing: editing, showHelp: showHelp, showTicketSummary: showTicketSummary, inputCursor: inputCursor, ticketBuffer: ticketBuffer, ticketCursor: ticketCursor, activeField: activeField, logScrollOffset: logScrollOffset);
+                        session.ShowTicketSummary = true;
+                        UpdateLayout(layout, session);
                         ctx.Refresh();
                         continue;
                     }
 
-                    if (key.KeyChar == '?' && selectedBlock == null && !editing && inputBuffer.Length == 0 && ticketBuffer.Length == 0)
+                    if (key.KeyChar == '?' && session.SelectedBlock == null && !session.Editing && session.InputBuffer.Length == 0 && session.TicketBuffer.Length == 0)
                     {
-                        showHelp = !showHelp;
-                        UpdateLayout(layout, bookedBlocks, inputBuffer, filePath, cursorSlot: cursorSlot, selectionLength: selectionLength, selectedBlock: selectedBlock, editing: editing, showHelp: showHelp, showTicketSummary: showTicketSummary, inputCursor: inputCursor, ticketBuffer: ticketBuffer, ticketCursor: ticketCursor, activeField: activeField, logScrollOffset: logScrollOffset);
+                        session.ShowHelp = !session.ShowHelp;
+                        UpdateLayout(layout, session);
                         ctx.Refresh();
                         continue;
                     }
 
-                    var currentBuffer = activeField == 0 ? inputBuffer : ticketBuffer;
-                    var currentCursor = activeField == 0 ? inputCursor : ticketCursor;
+                    var currentBuffer = session.ActiveField == 0 ? session.InputBuffer : session.TicketBuffer;
+                    var currentCursor = session.ActiveField == 0 ? session.InputCursor : session.TicketCursor;
 
                     if (key.Key == ConsoleKey.LeftArrow && currentBuffer.Length > 0)
                     {
@@ -185,139 +175,139 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                     }
                     else if (key.Key == ConsoleKey.LeftArrow)
                     {
-                        // If abandoning an edit, restore the block's original slots in occupied[]
+                        // If abandoning an edit, restore the block's original slots in the schedule
                         // (they were freed on Ctrl+E to allow live resize).
-                        if (editing && selectedBlock != null)
+                        if (session.Editing && session.SelectedBlock != null)
                         {
-                            schedule.FillSlots(selectedBlock);
+                            schedule.FillSlots(session.SelectedBlock);
                         }
-                        if (selectedBlock != null)
+                        if (session.SelectedBlock != null)
                         {
                             // On an existing block: jump to slot just before it
-                            var target = selectedBlock.StartSlot - 1;
+                            var target = session.SelectedBlock.StartSlot - 1;
                             if (target >= 0)
                             {
                                 var adj = schedule.FindAt(target);
                                 if (adj != null)
                                 {
-                                    cursorSlot = adj.StartSlot;
-                                    selectionLength = adj.Length;
-                                    selectedBlock = adj;
+                                    session.CursorSlot = adj.StartSlot;
+                                    session.SelectionLength = adj.Length;
+                                    session.SelectedBlock = adj;
                                 }
                                 else
                                 {
-                                    cursorSlot = target;
-                                    selectionLength = 1;
-                                    selectedBlock = null;
+                                    session.CursorSlot = target;
+                                    session.SelectionLength = 1;
+                                    session.SelectedBlock = null;
                                 }
                             }
                         }
-                        else if (cursorSlot > 0)
+                        else if (session.CursorSlot > 0)
                         {
                             // Free selection: slide left by 1, keeping length
-                            var newStart = cursorSlot - 1;
+                            var newStart = session.CursorSlot - 1;
                             var adj = schedule.FindAt(newStart);
                             if (adj != null)
                             {
-                                cursorSlot = adj.StartSlot;
-                                selectionLength = adj.Length;
-                                selectedBlock = adj;
+                                session.CursorSlot = adj.StartSlot;
+                                session.SelectionLength = adj.Length;
+                                session.SelectedBlock = adj;
                             }
                             else if (schedule.IsFree(newStart))
                             {
-                                cursorSlot = newStart;
+                                session.CursorSlot = newStart;
                             }
                         }
-                        editing = false;
-                        activeField = 0;
-                        inputBuffer.Clear(); inputCursor = 0;
-                        ticketBuffer.Clear(); ticketCursor = 0;
+                        session.Editing = false;
+                        session.ActiveField = 0;
+                        session.InputBuffer.Clear(); session.InputCursor = 0;
+                        session.TicketBuffer.Clear(); session.TicketCursor = 0;
                     }
                     else if (key.Key == ConsoleKey.RightArrow)
                     {
-                        // If abandoning an edit, restore the block's original slots in occupied[]
+                        // If abandoning an edit, restore the block's original slots in the schedule
                         // (they were freed on Ctrl+E to allow live resize).
-                        if (editing && selectedBlock != null)
+                        if (session.Editing && session.SelectedBlock != null)
                         {
-                            schedule.FillSlots(selectedBlock);
+                            schedule.FillSlots(session.SelectedBlock);
                         }
-                        if (selectedBlock != null)
+                        if (session.SelectedBlock != null)
                         {
                             // On an existing block: jump to slot just after it
-                            var target = selectedBlock.StartSlot + selectedBlock.Length;
+                            var target = session.SelectedBlock.StartSlot + session.SelectedBlock.Length;
                             if (target < 96)
                             {
                                 var adj = schedule.FindAt(target);
                                 if (adj != null)
                                 {
-                                    cursorSlot = adj.StartSlot;
-                                    selectionLength = adj.Length;
-                                    selectedBlock = adj;
+                                    session.CursorSlot = adj.StartSlot;
+                                    session.SelectionLength = adj.Length;
+                                    session.SelectedBlock = adj;
                                 }
                                 else
                                 {
-                                    cursorSlot = target;
-                                    selectionLength = 1;
-                                    selectedBlock = null;
+                                    session.CursorSlot = target;
+                                    session.SelectionLength = 1;
+                                    session.SelectedBlock = null;
                                 }
                             }
                         }
-                        else if (cursorSlot + selectionLength < 96)
+                        else if (session.CursorSlot + session.SelectionLength < 96)
                         {
                             // Free selection: slide right by 1, keeping length
-                            var newEnd = cursorSlot + selectionLength; // the slot that would become the new last slot
+                            var newEnd = session.CursorSlot + session.SelectionLength; // the slot that would become the new last slot
                             var adj = schedule.FindAt(newEnd);
                             if (adj != null)
                             {
-                                cursorSlot = adj.StartSlot;
-                                selectionLength = adj.Length;
-                                selectedBlock = adj;
+                                session.CursorSlot = adj.StartSlot;
+                                session.SelectionLength = adj.Length;
+                                session.SelectedBlock = adj;
                             }
                             else if (schedule.IsFree(newEnd))
                             {
-                                cursorSlot++;
+                                session.CursorSlot++;
                             }
                         }
-                        editing = false;
-                        activeField = 0;
-                        inputBuffer.Clear(); inputCursor = 0;
-                        ticketBuffer.Clear(); ticketCursor = 0;
+                        session.Editing = false;
+                        session.ActiveField = 0;
+                        session.InputBuffer.Clear(); session.InputCursor = 0;
+                        session.TicketBuffer.Clear(); session.TicketCursor = 0;
                     }
                     else if (key.Key == ConsoleKey.UpArrow)
                     {
-                        if (selectedBlock == null)
+                        if (session.SelectedBlock == null)
                         {
-                            var newLen = selectionLength + 1;
-                            if (cursorSlot + newLen <= 96 && !schedule.IsOverlapping(cursorSlot, newLen))
-                                selectionLength = newLen;
+                            var newLen = session.SelectionLength + 1;
+                            if (session.CursorSlot + newLen <= 96 && !schedule.IsOverlapping(session.CursorSlot, newLen))
+                                session.SelectionLength = newLen;
                         }
-                        else if (editing && schedule.CanGrow(selectedBlock.StartSlot, selectionLength))
+                        else if (session.Editing && schedule.CanGrow(session.SelectedBlock.StartSlot, session.SelectionLength))
                         {
-                            selectionLength++;
+                            session.SelectionLength++;
                         }
                     }
                     else if (key.Key == ConsoleKey.DownArrow)
                     {
-                        if (selectedBlock == null && selectionLength > 1)
-                            selectionLength--;
-                        else if (editing && selectedBlock != null && selectionLength > 1)
-                            selectionLength--;
+                        if (session.SelectedBlock == null && session.SelectionLength > 1)
+                            session.SelectionLength--;
+                        else if (session.Editing && session.SelectedBlock != null && session.SelectionLength > 1)
+                            session.SelectionLength--;
                     }
                     else if (key.Key == ConsoleKey.PageUp)
                     {
-                        logScrollOffset = Math.Max(0, logScrollOffset - 5);
+                        session.LogScrollOffset = Math.Max(0, session.LogScrollOffset - 5);
                     }
                     else if (key.Key == ConsoleKey.PageDown)
                     {
-                        var maxOffset = Math.Max(0, bookedBlocks.Count - 1);
-                        logScrollOffset = Math.Min(maxOffset, logScrollOffset + 5);
+                        var maxOffset = Math.Max(0, schedule.Count - 1);
+                        session.LogScrollOffset = Math.Min(maxOffset, session.LogScrollOffset + 5);
                     }
                     else if (key.Key == ConsoleKey.D && key.Modifiers.HasFlag(ConsoleModifiers.Control))
                     {
-                        if (selectedBlock != null)
+                        if (session.SelectedBlock != null)
                         {
                             confirmingDelete = true;
-                            UpdateLayout(layout, bookedBlocks, inputBuffer, filePath, confirmingDelete: true, cursorSlot: cursorSlot, selectionLength: selectionLength, selectedBlock: selectedBlock, editing: editing, showHelp: showHelp, showTicketSummary: showTicketSummary, inputCursor: inputCursor, ticketBuffer: ticketBuffer, ticketCursor: ticketCursor, activeField: activeField, logScrollOffset: logScrollOffset);
+                            UpdateLayout(layout, session, confirmingDelete: true);
                             ctx.Refresh();
                             continue;
                         }
@@ -325,64 +315,64 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                     else if (key.Key == ConsoleKey.E && key.Modifiers.HasFlag(ConsoleModifiers.Control))
                     {
                         // Ctrl+E: edit selected block's label, ticket, and length.
-                        // Free the block's slots in occupied[] so resize can reuse them;
-                        // Enter re-marks per selectionLength, abandon paths re-mark per the block's original length.
-                        if (selectedBlock != null && !editing)
+                        // Free the block's slots so resize can reuse them; Enter re-marks per
+                        // SelectionLength, abandon paths re-mark per the block's original length.
+                        if (session.SelectedBlock != null && !session.Editing)
                         {
-                            editing = true;
-                            cursorSlot = selectedBlock.StartSlot;
-                            selectionLength = selectedBlock.Length;
-                            schedule.FreeSlots(selectedBlock);
-                            inputBuffer.Clear();
-                            inputBuffer.Append(selectedBlock.Label);
-                            inputCursor = inputBuffer.Length;
-                            ticketBuffer.Clear();
-                            ticketBuffer.Append(selectedBlock.Ticket);
-                            ticketCursor = ticketBuffer.Length;
-                            activeField = 0;
-                            currentCursor = inputBuffer.Length;
+                            session.Editing = true;
+                            session.CursorSlot = session.SelectedBlock.StartSlot;
+                            session.SelectionLength = session.SelectedBlock.Length;
+                            schedule.FreeSlots(session.SelectedBlock);
+                            session.InputBuffer.Clear();
+                            session.InputBuffer.Append(session.SelectedBlock.Label);
+                            session.InputCursor = session.InputBuffer.Length;
+                            session.TicketBuffer.Clear();
+                            session.TicketBuffer.Append(session.SelectedBlock.Ticket);
+                            session.TicketCursor = session.TicketBuffer.Length;
+                            session.ActiveField = 0;
+                            currentCursor = session.InputBuffer.Length;
                         }
                     }
                     else if (key.Key == ConsoleKey.Enter)
                     {
-                        if (editing && selectedBlock != null && inputBuffer.Length > 0)
+                        if (session.Editing && session.SelectedBlock != null && session.InputBuffer.Length > 0)
                         {
                             // Save edited label, ticket, and (possibly resized) length.
-                            // The block's original slots were freed in occupied[] on Ctrl+E.
-                            var newLabel = inputBuffer.ToString();
-                            var newTicket = ticketBuffer.ToString();
-                            var edited = selectedBlock with { Length = selectionLength, Label = newLabel, Ticket = newTicket };
-                            selectedBlock = schedule.Replace(selectedBlock, edited);
-                            PunchStorage.Save(workingDate, bookedBlocks);
-                            editing = false;
-                            inputBuffer.Clear();
-                            inputCursor = 0;
-                            ticketBuffer.Clear();
-                            ticketCursor = 0;
-                            activeField = 0;
+                            // The block's original slots were freed on Ctrl+E.
+                            var newLabel = session.InputBuffer.ToString();
+                            var newTicket = session.TicketBuffer.ToString();
+                            var edited = session.SelectedBlock with { Length = session.SelectionLength, Label = newLabel, Ticket = newTicket };
+                            session.SelectedBlock = schedule.Replace(session.SelectedBlock, edited);
+                            PunchStorage.Save(workingDate, schedule.Blocks);
+                            session.Editing = false;
+                            session.InputBuffer.Clear();
+                            session.InputCursor = 0;
+                            session.TicketBuffer.Clear();
+                            session.TicketCursor = 0;
+                            session.ActiveField = 0;
                             currentCursor = 0;
                         }
-                        else if (selectedBlock == null && inputBuffer.Length > 0)
+                        else if (session.SelectedBlock == null && session.InputBuffer.Length > 0)
                         {
-                            var label = inputBuffer.ToString();
-                            var ticket = ticketBuffer.ToString();
-                            var block = new TimeBlock(cursorSlot, selectionLength, label, ticket);
+                            var label = session.InputBuffer.ToString();
+                            var ticket = session.TicketBuffer.ToString();
+                            var block = new TimeBlock(session.CursorSlot, session.SelectionLength, label, ticket);
                             schedule.Add(block);
-                            PunchStorage.Save(workingDate, bookedBlocks);
+                            PunchStorage.Save(workingDate, schedule.Blocks);
 
-                            inputBuffer.Clear();
-                            inputCursor = 0;
-                            ticketBuffer.Clear();
-                            ticketCursor = 0;
-                            activeField = 0;
+                            session.InputBuffer.Clear();
+                            session.InputCursor = 0;
+                            session.TicketBuffer.Clear();
+                            session.TicketCursor = 0;
+                            session.ActiveField = 0;
                             currentCursor = 0;
 
-                            (cursorSlot, selectionLength, selectedBlock) = schedule.AdvanceAfterAdd(cursorSlot);
+                            (session.CursorSlot, session.SelectionLength, session.SelectedBlock) = schedule.AdvanceAfterAdd(session.CursorSlot);
                         }
                     }
                     else if (key.Key == ConsoleKey.Backspace)
                     {
-                        if ((selectedBlock == null || editing) && currentCursor > 0)
+                        if ((session.SelectedBlock == null || session.Editing) && currentCursor > 0)
                         {
                             currentBuffer.Remove(currentCursor - 1, 1);
                             currentCursor--;
@@ -390,72 +380,70 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                     }
                     else if (key.Key == ConsoleKey.Delete)
                     {
-                        if ((selectedBlock == null || editing) && currentCursor < currentBuffer.Length)
+                        if ((session.SelectedBlock == null || session.Editing) && currentCursor < currentBuffer.Length)
                             currentBuffer.Remove(currentCursor, 1);
                     }
                     else if (key.Key == ConsoleKey.End)
                     {
-                        if ((selectedBlock == null || editing) && currentBuffer.Length > 0)
+                        if ((session.SelectedBlock == null || session.Editing) && currentBuffer.Length > 0)
                             currentCursor = currentBuffer.Length;
                     }
                     else if (key.Key == ConsoleKey.Home)
                     {
-                        if ((selectedBlock == null || editing) && currentBuffer.Length > 0)
+                        if ((session.SelectedBlock == null || session.Editing) && currentBuffer.Length > 0)
                             currentCursor = 0;
                     }
                     else if (key.Key == ConsoleKey.Tab)
                     {
-                        if (selectedBlock == null || editing)
+                        if (session.SelectedBlock == null || session.Editing)
                         {
                             // Write back current cursor before switching
-                            if (activeField == 0) inputCursor = currentCursor;
-                            else ticketCursor = currentCursor;
+                            if (session.ActiveField == 0) session.InputCursor = currentCursor;
+                            else session.TicketCursor = currentCursor;
 
-                            activeField = activeField == 0 ? 1 : 0;
+                            session.ActiveField = session.ActiveField == 0 ? 1 : 0;
                             // Place cursor at end of newly focused field
-                            if (activeField == 0) currentCursor = inputBuffer.Length;
-                            else currentCursor = ticketBuffer.Length;
+                            currentCursor = session.ActiveField == 0 ? session.InputBuffer.Length : session.TicketBuffer.Length;
                         }
                     }
                     else if (key.KeyChar != '\0' && !char.IsControl(key.KeyChar))
                     {
-                        if (selectedBlock == null || editing)
+                        if (session.SelectedBlock == null || session.Editing)
                         {
-                            var ch = activeField == 1 ? char.ToUpperInvariant(key.KeyChar) : key.KeyChar;
+                            var ch = session.ActiveField == 1 ? char.ToUpperInvariant(key.KeyChar) : key.KeyChar;
                             currentBuffer.Insert(currentCursor, ch);
                             currentCursor++;
                         }
                     }
 
                     // Write back cursor position to the active field
-                    if (activeField == 0) inputCursor = currentCursor;
-                    else ticketCursor = currentCursor;
+                    if (session.ActiveField == 0) session.InputCursor = currentCursor;
+                    else session.TicketCursor = currentCursor;
 
                     // Auto-scroll to keep selected block visible
-                    if (selectedBlock != null)
+                    if (session.SelectedBlock != null)
                     {
-                        var sorted = bookedBlocks.OrderBy(b => b.StartSlot).ToList();
-                        var selIdx = sorted.FindIndex(b => b.StartSlot == selectedBlock.StartSlot && b.Length == selectedBlock.Length);
+                        var sorted = schedule.Blocks.OrderBy(b => b.StartSlot).ToList();
+                        var selIdx = sorted.FindIndex(b => b.StartSlot == session.SelectedBlock.StartSlot && b.Length == session.SelectedBlock.Length);
                         if (selIdx >= 0)
                         {
                             // When scrolled, "above" indicator takes 1 line
                             var visHeight = Math.Max(1, System.Console.WindowHeight - 10 - 2 - 1);
-                            if (selIdx < logScrollOffset)
-                                logScrollOffset = selIdx;
-                            else if (selIdx >= logScrollOffset + visHeight)
-                                logScrollOffset = selIdx - visHeight + 1;
+                            if (selIdx < session.LogScrollOffset)
+                                session.LogScrollOffset = selIdx;
+                            else if (selIdx >= session.LogScrollOffset + visHeight)
+                                session.LogScrollOffset = selIdx - visHeight + 1;
                         }
                     }
 
                     // Clamp scroll offset after block additions/deletions
                     // When scrolled down, the "▲ more above" indicator takes 1 line,
                     // so only viewHeight-1 block rows are visible at the bottom.
-                    var totalBlocks = bookedBlocks.Count;
                     var viewHeight = Math.Max(1, System.Console.WindowHeight - 10 - 2);
-                    var maxOff = Math.Max(0, totalBlocks - (viewHeight - 1));
-                    logScrollOffset = Math.Clamp(logScrollOffset, 0, maxOff);
+                    var maxOff = Math.Max(0, schedule.Count - (viewHeight - 1));
+                    session.LogScrollOffset = Math.Clamp(session.LogScrollOffset, 0, maxOff);
 
-                    UpdateLayout(layout, bookedBlocks, inputBuffer, filePath, cursorSlot: cursorSlot, selectionLength: selectionLength, selectedBlock: selectedBlock, editing: editing, showHelp: showHelp, showTicketSummary: showTicketSummary, inputCursor: inputCursor, ticketBuffer: ticketBuffer, ticketCursor: ticketCursor, activeField: activeField, logScrollOffset: logScrollOffset);
+                    UpdateLayout(layout, session);
                     ctx.Refresh();
                 }
             });
@@ -469,8 +457,23 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
         return 0;
     }
 
-    private static void UpdateLayout(Layout layout, IReadOnlyList<TimeBlock> bookedBlocks, StringBuilder inputBuffer, string filePath, bool confirming = false, bool confirmingDelete = false, int cursorSlot = 0, int selectionLength = 1, TimeBlock? selectedBlock = null, bool editing = false, bool showHelp = false, bool showTicketSummary = false, int inputCursor = 0, StringBuilder? ticketBuffer = null, int ticketCursor = 0, int activeField = 0, int logScrollOffset = 0)
+    private static void UpdateLayout(Layout layout, PunchSession session, bool confirming = false, bool confirmingDelete = false)
     {
+        var bookedBlocks = session.Blocks;
+        var filePath = session.FilePath;
+        var cursorSlot = session.CursorSlot;
+        var selectionLength = session.SelectionLength;
+        var selectedBlock = session.SelectedBlock;
+        var editing = session.Editing;
+        var showHelp = session.ShowHelp;
+        var showTicketSummary = session.ShowTicketSummary;
+        var inputBuffer = session.InputBuffer;
+        var inputCursor = session.InputCursor;
+        var ticketBuffer = session.TicketBuffer;
+        var ticketCursor = session.TicketCursor;
+        var activeField = session.ActiveField;
+        var logScrollOffset = session.LogScrollOffset;
+
         // Timeline pane
         var consoleWidth = System.Console.WindowWidth;
         var barWidth = Math.Max(1, consoleWidth - 4); // account for panel border + padding
@@ -705,7 +708,6 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
         }
 
         // Input pane
-        var tb = ticketBuffer ?? new StringBuilder();
         if (confirming)
         {
             layout["Input"].Update(
@@ -723,7 +725,7 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
         else if (selectedBlock != null && editing)
         {
             var descLine = RenderFieldLine("Description", inputBuffer, inputCursor, activeField == 0);
-            var tickLine = RenderFieldLine("Ticket", tb, ticketCursor, activeField == 1);
+            var tickLine = RenderFieldLine("Ticket", ticketBuffer, ticketCursor, activeField == 1);
             layout["Input"].Update(
                 new Panel(new Rows(new Markup(descLine), new Markup(tickLine)))
                     .Header("Input [cyan](editing)[/]")
@@ -745,7 +747,7 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
         else
         {
             var descLine = RenderFieldLine("Description", inputBuffer, inputCursor, activeField == 0);
-            var tickLine = RenderFieldLine("Ticket", tb, ticketCursor, activeField == 1);
+            var tickLine = RenderFieldLine("Ticket", ticketBuffer, ticketCursor, activeField == 1);
             layout["Input"].Update(
                 new Panel(new Rows(new Markup(descLine), new Markup(tickLine)))
                     .Header("Input")

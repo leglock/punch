@@ -38,4 +38,33 @@ internal sealed class PunchSession
     public bool ShowHelp { get; set; }
     public bool ShowTicketSummary { get; set; }
     public int LogScrollOffset { get; set; }
+
+    // Text input is editable when composing a new entry (no block selected) or
+    // editing an existing one.
+    public bool IsInputActive => SelectedBlock == null || Editing;
+
+    // The buffer/cursor for whichever field currently has focus.
+    public StringBuilder ActiveBuffer => ActiveField == 0 ? InputBuffer : TicketBuffer;
+
+    public int ActiveCursor
+    {
+        get => ActiveField == 0 ? InputCursor : TicketCursor;
+        set
+        {
+            if (ActiveField == 0) InputCursor = value;
+            else TicketCursor = value;
+        }
+    }
+
+    // Clears both input fields and returns focus to the Description field,
+    // leaving edit mode. Does not touch the cursor selection on the timeline.
+    public void ResetInput()
+    {
+        Editing = false;
+        ActiveField = 0;
+        InputBuffer.Clear();
+        InputCursor = 0;
+        TicketBuffer.Clear();
+        TicketCursor = 0;
+    }
 }

@@ -140,6 +140,8 @@ internal sealed class PunchView
     {
         if (session.ShowHelp)
             _layout["Messages"].Update(BuildHelpPanel());
+        else if (session.ShowTicketPicker)
+            _layout["Messages"].Update(BuildTicketPickerPanel(session));
         else if (session.ShowTicketSummary)
             _layout["Messages"].Update(BuildTicketSummaryPanel(session));
         else
@@ -229,7 +231,8 @@ internal sealed class PunchView
             "[bold]Ctrl+D[/]      Delete selected entry\n" +
             "[bold]Ctrl+Q, Q[/]   Quit\n" +
             "[bold]?[/]           Toggle this help\n" +
-            "[bold]F3[/]          Ticket summary");
+            "[bold]F3[/]          Ticket summary\n" +
+            "[bold]F4[/]          Pick ticket for entry");
         var helpContent = new Rows(
             Align.Center(titleLine),
             new Text(" "),
@@ -271,6 +274,69 @@ internal sealed class PunchView
             .Border(BoxBorder.Rounded)
             .Expand();
         return new Panel(Align.Center(summaryPanel, VerticalAlignment.Middle))
+            .Expand()
+            .NoBorder();
+    }
+
+    private static IRenderable BuildTicketPickerPanel(PunchSession session)
+    {
+        var lines = new List<IRenderable>();
+        if (session.Tickets.Count == 0)
+        {
+            lines.Add(new Markup("[dim]No tickets found.[/]"));
+            lines.Add(new Text(" "));
+            lines.Add(new Markup("[dim]Create [/][cyan]~/.punch/tickets.txt[/][dim] with one ticket per line,[/]"));
+            lines.Add(new Markup("[dim]tab- or comma-delimited as [/][cyan]TICKET<tab|,>Title[/][dim].[/]"));
+        }
+        else
+        {
+            // Window the list around the cursor so long lists scroll instead of
+            // overflowing the pane. Budget: messages interior minus the inner
+            // panel border (2) and the footer block (blank + hint = 2).
+            var consoleHeight = System.Console.WindowHeight;
+            var interior = Math.Max(3, consoleHeight - 10 - 2);
+            var maxRows = Math.Max(1, interior - 2 - 2);
+
+            var count = session.Tickets.Count;
+            var cursor = session.TicketPickerCursor;
+            var offset = count <= maxRows
+                ? 0
+                : Math.Clamp(cursor - maxRows / 2, 0, count - maxRows);
+
+            var hasMoreAbove = offset > 0;
+            var hasMoreBelow = offset + maxRows < count;
+            // Indicators consume a row each; shrink the window to make room.
+            var visibleRows = maxRows - (hasMoreAbove ? 1 : 0) - (hasMoreBelow ? 1 : 0);
+            visibleRows = Math.Max(1, visibleRows);
+            offset = count <= visibleRows
+                ? 0
+                : Math.Clamp(cursor - visibleRows / 2, 0, count - visibleRows);
+            hasMoreAbove = offset > 0;
+            hasMoreBelow = offset + visibleRows < count;
+
+            if (hasMoreAbove)
+                lines.Add(new Markup($"  [dim]▲ {offset} more[/]"));
+            for (var i = offset; i < offset + visibleRows && i < count; i++)
+            {
+                var t = session.Tickets[i];
+                var ticket = Markup.Escape(t.Ticket);
+                var title = Markup.Escape(t.Title);
+                if (i == cursor)
+                    lines.Add(new Markup($"  [bold yellow]> {ticket}[/]  {title}"));
+                else
+                    lines.Add(new Markup($"    [cyan]{ticket}[/]  [dim]{title}[/]"));
+            }
+            if (hasMoreBelow)
+                lines.Add(new Markup($"  [dim]▼ {count - offset - visibleRows} more[/]"));
+        }
+        lines.Add(new Text(" "));
+        lines.Add(new Markup("[dim]↑/↓ select · Enter assign · Esc cancel[/]"));
+
+        var pickerPanel = new Panel(new Rows(lines))
+            .Header("Pick Ticket")
+            .Border(BoxBorder.Rounded)
+            .Expand();
+        return new Panel(Align.Center(pickerPanel, VerticalAlignment.Middle))
             .Expand()
             .NoBorder();
     }
@@ -335,10 +401,10 @@ internal sealed class PunchView
         var totalMinutesAll = session.Blocks.Where(b => !b.IsUnpaid).Sum(b => b.Length * 15);
         var totalFormatted = Duration.HumanizeTotal(totalMinutesAll);
         var percent = totalMinutesAll * 100 / 480;
-        var statusLeftPlain = $"  {filePath}  ?=help F3=summary";
+        var statusLeftPlain = $"  {filePath}  ?=help F3=summary F4=tickets";
         var statusRight = $"{totalFormatted}    {percent}% of 8h  ";
         var padding = Math.Max(0, consoleWidth - statusLeftPlain.Length - statusRight.Length);
-        var statusBar = $"[white on orangered1]  {Markup.Escape(filePath)}  [bold yellow]?=help F3=summary[/]{new string(' ', padding)}[bold white]{Markup.Escape(statusRight)}[/][/]";
+        var statusBar = $"[white on orangered1]  {Markup.Escape(filePath)}  [bold yellow]?=help F3=summary F4=tickets[/]{new string(' ', padding)}[bold white]{Markup.Escape(statusRight)}[/][/]";
         _layout["StatusBar"].Update(new Markup(statusBar));
     }
 

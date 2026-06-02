@@ -39,6 +39,12 @@ internal sealed class PunchSession
     public bool ShowTicketSummary { get; set; }
     public int LogScrollOffset { get; set; }
 
+    // Ticket picker overlay. Tickets is reloaded from disk each time the picker
+    // is opened, so edits to ~/.punch/tickets.txt are picked up without a restart.
+    public bool ShowTicketPicker { get; set; }
+    public int TicketPickerCursor { get; set; }
+    public List<TicketEntry> Tickets { get; set; } = new();
+
     // Text input is editable when composing a new entry (no block selected) or
     // editing an existing one.
     public bool IsInputActive => SelectedBlock == null || Editing;

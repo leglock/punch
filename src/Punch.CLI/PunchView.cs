@@ -148,7 +148,12 @@ internal sealed class PunchView
                     new Layout("Log").Update(BuildLogPanel(session)),
                     new Layout("Picker").Update(BuildTicketPickerPanel(session))));
         else if (session.ShowTicketSummary)
-            _layout["Messages"].Update(BuildTicketSummaryPanel(session));
+            // Split like the picker so the time log stays visible on the left
+            // while the summary occupies the right half.
+            _layout["Messages"].Update(new Layout("MessagesSplit")
+                .SplitColumns(
+                    new Layout("Log").Update(BuildLogPanel(session)),
+                    new Layout("Summary").Update(BuildTicketSummaryPanel(session))));
         else
             _layout["Messages"].Update(BuildLogPanel(session));
     }
@@ -270,17 +275,23 @@ internal sealed class PunchView
             summaryLines.Add(new Markup($"  {ticketLabel} {dur}"));
         }
 
+        var billableMinutes = blocks.Where(b => !b.IsUnpaid).Sum(b => b.Length * 15);
+        var unbillableMinutes = blocks.Where(b => b.IsUnpaid).Sum(b => b.Length * 15);
         var totalDur = Duration.HumanizeTotal(blocks.Sum(b => b.Length * 15));
         summaryLines.Add(new Markup($"  [dim]{new string('─', 28)}[/]"));
+        summaryLines.Add(new Markup($"  {"Billable".PadRight(20)} {Duration.Humanize(billableMinutes)}"));
+        summaryLines.Add(new Markup($"  [grey50]{"Unbillable".PadRight(20)} {Duration.Humanize(unbillableMinutes)}[/]"));
         summaryLines.Add(new Markup($"  [bold]{"Total".PadRight(20)} {totalDur}[/]"));
 
-        var summaryPanel = new Panel(new Rows(summaryLines))
+        summaryLines.Add(new Text(" "));
+        summaryLines.Add(new Markup("[dim]Esc/F3 close[/]"));
+
+        // A single Expand-ed panel that fills the region height exactly, matching
+        // the log panel beside it.
+        return new Panel(new Rows(summaryLines))
             .Header("Ticket Summary")
             .Border(BoxBorder.Rounded)
             .Expand();
-        return new Panel(Align.Center(summaryPanel, VerticalAlignment.Middle))
-            .Expand()
-            .NoBorder();
     }
 
     // Clamps text to a maximum display width, appending an ellipsis when cut.
@@ -359,7 +370,7 @@ internal sealed class PunchView
                 lines.Add(new Markup($"  [dim]▼ {count - offset - visibleRows} more[/]"));
         }
         lines.Add(new Text(" "));
-        lines.Add(new Markup("[dim]↑/↓ select · Enter assign · Esc cancel[/]"));
+        lines.Add(new Markup("[dim]↑/↓ select · Enter assign · Esc/F4 cancel[/]"));
 
         // A single Expand-ed panel that fills the region height exactly, matching
         // the log panel beside it so the footer never gets clipped.

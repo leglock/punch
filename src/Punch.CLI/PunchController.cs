@@ -101,10 +101,10 @@ internal sealed class PunchController
                 continue;
             }
 
-            // Only F3 dismisses the ticket summary; other keys are swallowed.
+            // Esc/F3 dismiss the ticket summary; other keys are swallowed.
             if (_session.ShowTicketSummary)
             {
-                if (key.Key == ConsoleKey.F3)
+                if (key.Key == ConsoleKey.F3 || key.Key == ConsoleKey.Escape)
                 {
                     _session.ShowTicketSummary = false;
                     Render(ctx);

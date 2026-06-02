@@ -141,7 +141,12 @@ internal sealed class PunchView
         if (session.ShowHelp)
             _layout["Messages"].Update(BuildHelpPanel());
         else if (session.ShowTicketPicker)
-            _layout["Messages"].Update(BuildTicketPickerPanel(session));
+            // Split the content area so the time log stays visible on the left
+            // while the picker occupies the right half.
+            _layout["Messages"].Update(new Layout("MessagesSplit")
+                .SplitColumns(
+                    new Layout("Log").Update(BuildLogPanel(session)),
+                    new Layout("Picker").Update(BuildTicketPickerPanel(session))));
         else if (session.ShowTicketSummary)
             _layout["Messages"].Update(BuildTicketSummaryPanel(session));
         else
@@ -278,6 +283,14 @@ internal sealed class PunchView
             .NoBorder();
     }
 
+    // Clamps text to a maximum display width, appending an ellipsis when cut.
+    private static string Truncate(string text, int maxWidth)
+    {
+        if (maxWidth <= 0 || text.Length <= maxWidth)
+            return text;
+        return maxWidth == 1 ? "…" : text[..(maxWidth - 1)] + "…";
+    }
+
     private static IRenderable BuildTicketPickerPanel(PunchSession session)
     {
         var lines = new List<IRenderable>();
@@ -291,40 +304,56 @@ internal sealed class PunchView
         else
         {
             // Window the list around the cursor so long lists scroll instead of
-            // overflowing the pane. Budget: messages interior minus the inner
-            // panel border (2) and the footer block (blank + hint = 2).
+            // overflowing the pane. Budget: panel interior (messages region minus
+            // its border) minus the footer block (blank + hint = 2). Rows are
+            // truncated to one physical line below so the budget holds exactly.
             var consoleHeight = System.Console.WindowHeight;
             var interior = Math.Max(3, consoleHeight - 10 - 2);
-            var maxRows = Math.Max(1, interior - 2 - 2);
+            var maxRows = Math.Max(1, interior - 2);
+
+            // The picker occupies the right half of the content width; keep each
+            // row to a single line so wrapping never eats into the row budget.
+            var textWidth = Math.Max(8, System.Console.WindowWidth / 2 - 4);
 
             var count = session.Tickets.Count;
             var cursor = session.TicketPickerCursor;
-            var offset = count <= maxRows
-                ? 0
-                : Math.Clamp(cursor - maxRows / 2, 0, count - maxRows);
 
-            var hasMoreAbove = offset > 0;
-            var hasMoreBelow = offset + maxRows < count;
-            // Indicators consume a row each; shrink the window to make room.
-            var visibleRows = maxRows - (hasMoreAbove ? 1 : 0) - (hasMoreBelow ? 1 : 0);
-            visibleRows = Math.Max(1, visibleRows);
-            offset = count <= visibleRows
-                ? 0
-                : Math.Clamp(cursor - visibleRows / 2, 0, count - visibleRows);
-            hasMoreAbove = offset > 0;
-            hasMoreBelow = offset + visibleRows < count;
+            // The ▲/▼ indicators each consume a row, but whether they appear
+            // depends on the window position — which depends on how many rows fit.
+            // Iterate to a fixed point so the indicator lines never overshoot the
+            // budget (an overshoot of one would clip the footer).
+            var visibleRows = Math.Min(count, maxRows);
+            var offset = 0;
+            var hasMoreAbove = false;
+            var hasMoreBelow = false;
+            for (var iter = 0; iter < 4; iter++)
+            {
+                offset = count <= visibleRows
+                    ? 0
+                    : Math.Clamp(cursor - visibleRows / 2, 0, count - visibleRows);
+                hasMoreAbove = offset > 0;
+                hasMoreBelow = offset + visibleRows < count;
+                var fit = Math.Max(1, Math.Min(count,
+                    maxRows - (hasMoreAbove ? 1 : 0) - (hasMoreBelow ? 1 : 0)));
+                if (fit == visibleRows)
+                    break;
+                visibleRows = fit;
+            }
 
             if (hasMoreAbove)
                 lines.Add(new Markup($"  [dim]▲ {offset} more[/]"));
             for (var i = offset; i < offset + visibleRows && i < count; i++)
             {
                 var t = session.Tickets[i];
+                // Prefix is 4 chars ("  > " / "    "); reserve the rest for the
+                // ticket + two-space gap + title, truncating the title to fit.
+                var title = Truncate(t.Title, Math.Max(1, textWidth - 4 - t.Ticket.Length - 2));
                 var ticket = Markup.Escape(t.Ticket);
-                var title = Markup.Escape(t.Title);
+                var titleEsc = Markup.Escape(title);
                 if (i == cursor)
-                    lines.Add(new Markup($"  [bold yellow]> {ticket}[/]  {title}"));
+                    lines.Add(new Markup($"  [bold yellow]> {ticket}[/]  {titleEsc}"));
                 else
-                    lines.Add(new Markup($"    [cyan]{ticket}[/]  [dim]{title}[/]"));
+                    lines.Add(new Markup($"    [cyan]{ticket}[/]  [dim]{titleEsc}[/]"));
             }
             if (hasMoreBelow)
                 lines.Add(new Markup($"  [dim]▼ {count - offset - visibleRows} more[/]"));
@@ -332,13 +361,12 @@ internal sealed class PunchView
         lines.Add(new Text(" "));
         lines.Add(new Markup("[dim]↑/↓ select · Enter assign · Esc cancel[/]"));
 
-        var pickerPanel = new Panel(new Rows(lines))
+        // A single Expand-ed panel that fills the region height exactly, matching
+        // the log panel beside it so the footer never gets clipped.
+        return new Panel(new Rows(lines))
             .Header("Pick Ticket")
             .Border(BoxBorder.Rounded)
             .Expand();
-        return new Panel(Align.Center(pickerPanel, VerticalAlignment.Middle))
-            .Expand()
-            .NoBorder();
     }
 
     private void RenderInput(PunchSession session, bool confirming, bool confirmingDelete)

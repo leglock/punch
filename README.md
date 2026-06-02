@@ -16,9 +16,10 @@ A TUI time tracker for your workday. Log, label, and export your hours without l
 - Full-screen terminal UI built with .NET 10 and Spectre.Console
 - Day timeline split into 96 quarter-hour slots — select a range and book it
 - Label each entry with a description and an optional ticket number
+- Pick a ticket from a list (F4) maintained in `~/.punch/tickets.txt`
 - Edit and resize existing entries in place
 - Running workday total in the status bar, with lunch and break blocks excluded
-- Ticket summary view (F3) totalling time per ticket
+- Ticket summary view (F3) totalling time per ticket, with billable/unbillable subtotals
 - Scrollable time log for busy days
 - One JSON file per day, stored under `~/.punch/data/`
 
@@ -58,6 +59,7 @@ the entry. Navigating onto an existing entry selects it for editing or deletion.
 | Ctrl+E       | Edit selected entry                 |
 | Ctrl+D       | Delete selected entry               |
 | F3           | Ticket summary                      |
+| F4           | Pick a ticket for selected entry    |
 | ?            | Toggle help                         |
 | Ctrl+Q, Q    | Quit                                |
 
@@ -65,6 +67,16 @@ the entry. Navigating onto an existing entry selects it for editing or deletion.
 
 Entries are saved automatically to `~/.punch/data/yyyy-MM-dd.json` — one file
 per day — on every add, edit, and delete.
+
+To populate the ticket picker (F4), maintain a `~/.punch/tickets.txt` file with
+one ticket per line as `ticket,title` (tab or comma separated). Blank lines and
+lines starting with `#` are ignored.
+
+```
+# ~/.punch/tickets.txt
+PROJ-123,Fix login redirect
+PROJ-456,Quarterly report export
+```
 
 ## Development
 

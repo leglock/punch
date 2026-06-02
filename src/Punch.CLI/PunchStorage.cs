@@ -25,6 +25,42 @@ internal static class PunchStorage
         return full.StartsWith(home) ? "~" + full[home.Length..] : full;
     }
 
+    // The manually-maintained tickets list sits alongside the data dir, e.g.
+    // ~/.punch/tickets.txt (parent of ~/.punch/data).
+    public static string GetTicketsFilePath()
+    {
+        var dataDir = GetDataDirectory();
+        var baseDir = Directory.GetParent(dataDir)?.FullName ?? dataDir;
+        return Path.Combine(baseDir, "tickets.txt");
+    }
+
+    // Loads the tickets list: one ticket per line, tab- or comma-delimited into
+    // "ticket<sep>title". Blank lines and '#' comments are skipped, as are rows
+    // with an empty ticket. Returns an empty list if the file is missing.
+    public static List<TicketEntry> LoadTickets()
+    {
+        var path = GetTicketsFilePath();
+        if (!File.Exists(path))
+            return new List<TicketEntry>();
+
+        var result = new List<TicketEntry>();
+        foreach (var raw in File.ReadAllLines(path))
+        {
+            var line = raw.Trim();
+            if (line.Length == 0 || line.StartsWith('#'))
+                continue;
+
+            var parts = line.Split(new[] { '\t', ',' }, 2);
+            var ticket = parts[0].Trim();
+            if (ticket.Length == 0)
+                continue;
+
+            var title = parts.Length > 1 ? parts[1].Trim() : "";
+            result.Add(new TicketEntry(ticket, title));
+        }
+        return result;
+    }
+
     public static List<TimeBlock> Load(DateOnly date)
     {
         var path = GetFilePath(date);

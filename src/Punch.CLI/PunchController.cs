@@ -65,6 +65,42 @@ internal sealed class PunchController
                 continue;
             }
 
+            // Ticket picker is modal: arrows move the highlight, Enter assigns,
+            // Esc/F4 cancel; all other keys are swallowed.
+            if (_session.ShowTicketPicker)
+            {
+                switch (key.Key)
+                {
+                    case ConsoleKey.UpArrow:
+                        if (_session.TicketPickerCursor > 0)
+                            _session.TicketPickerCursor--;
+                        break;
+                    case ConsoleKey.DownArrow:
+                        if (_session.TicketPickerCursor < _session.Tickets.Count - 1)
+                            _session.TicketPickerCursor++;
+                        break;
+                    case ConsoleKey.Enter:
+                        ApplyTicketPick();
+                        break;
+                    case ConsoleKey.Escape:
+                    case ConsoleKey.F4:
+                        _session.ShowTicketPicker = false;
+                        break;
+                }
+                Render(ctx);
+                continue;
+            }
+
+            // F4 opens the ticket picker for the selected block (not while editing).
+            if (key.Key == ConsoleKey.F4 && _session.SelectedBlock != null && !_session.Editing)
+            {
+                _session.Tickets = PunchStorage.LoadTickets();
+                _session.TicketPickerCursor = 0;
+                _session.ShowTicketPicker = true;
+                Render(ctx);
+                continue;
+            }
+
             // Only F3 dismisses the ticket summary; other keys are swallowed.
             if (_session.ShowTicketSummary)
             {
@@ -331,6 +367,20 @@ internal sealed class PunchController
             (_session.CursorSlot, _session.SelectionLength, _session.SelectedBlock) =
                 Schedule.AdvanceAfterAdd(_session.CursorSlot);
         }
+    }
+
+    private void ApplyTicketPick()
+    {
+        // Write only the picked ticket onto the selected block; the label is left
+        // untouched. The block keeps its slots, so Replace re-derives occupancy.
+        if (_session.SelectedBlock != null && _session.Tickets.Count > 0)
+        {
+            var picked = _session.Tickets[_session.TicketPickerCursor];
+            var updated = _session.SelectedBlock with { Ticket = picked.Ticket };
+            _session.SelectedBlock = Schedule.Replace(_session.SelectedBlock, updated);
+            Save();
+        }
+        _session.ShowTicketPicker = false;
     }
 
     private void HandleTextInput(ConsoleKeyInfo key)

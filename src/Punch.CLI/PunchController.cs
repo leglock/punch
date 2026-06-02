@@ -119,8 +119,13 @@ internal sealed class PunchController
                 continue;
             }
 
-            if (key.KeyChar == '?' && _session.SelectedBlock == null && !_session.Editing
-                && _session.InputBuffer.Length == 0 && _session.TicketBuffer.Length == 0)
+            // Toggle help when not typing: a selected block parks the input
+            // fields, so '?' is free over an occupied slot. With a free cursor
+            // it only toggles when the input fields are empty so '?' can still
+            // be typed into a description.
+            if (key.KeyChar == '?' && !_session.Editing
+                && (_session.SelectedBlock != null
+                    || (_session.InputBuffer.Length == 0 && _session.TicketBuffer.Length == 0)))
             {
                 _session.ShowHelp = !_session.ShowHelp;
                 Render(ctx);

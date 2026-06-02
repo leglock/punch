@@ -139,7 +139,12 @@ internal sealed class PunchView
     private void RenderMessages(PunchSession session)
     {
         if (session.ShowHelp)
-            _layout["Messages"].Update(BuildHelpPanel());
+            // Split like the picker/summary so the time log stays visible on the
+            // left while help occupies the right half.
+            _layout["Messages"].Update(new Layout("MessagesSplit")
+                .SplitColumns(
+                    new Layout("Log").Update(BuildLogPanel(session)),
+                    new Layout("Help").Update(BuildHelpPanel())));
         else if (session.ShowTicketPicker)
             // Split the content area so the time log stays visible on the left
             // while the picker occupies the right half.
@@ -244,15 +249,17 @@ internal sealed class PunchView
             "[bold]F3[/]          Ticket summary\n" +
             "[bold]F4[/]          Pick ticket for entry");
         var helpContent = new Rows(
-            Align.Center(titleLine),
+            titleLine,
             new Text(" "),
-            helpText);
-        var helpPanel = new Panel(helpContent)
+            helpText,
+            new Text(" "),
+            new Markup("[dim]Esc/? cancel[/]"));
+        // A single Expand-ed panel that fills the region height exactly, matching
+        // the log panel beside it.
+        return new Panel(helpContent)
+            .Header("Help")
             .Border(BoxBorder.Rounded)
             .Expand();
-        return new Panel(Align.Center(helpPanel, VerticalAlignment.Middle))
-            .Expand()
-            .NoBorder();
     }
 
     private static IRenderable BuildTicketSummaryPanel(PunchSession session)

@@ -6,6 +6,7 @@ using Xunit;
 
 namespace Punch.CLI.Tests;
 
+[Collection(StorageCollection.Name)]
 public class PunchStorageTests : IDisposable
 {
     private readonly string _tempDir;

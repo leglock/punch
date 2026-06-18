@@ -51,7 +51,8 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                 cursorSlot = lastEnd;
         }
 
-        var session = new PunchSession(schedule, workingDate, filePath, cursorSlot);
+        var appSettings = PunchStorage.LoadSettings();
+        var session = new PunchSession(schedule, workingDate, filePath, cursorSlot, appSettings.TargetHours);
 
         AnsiConsole.AlternateScreen(() =>
         {

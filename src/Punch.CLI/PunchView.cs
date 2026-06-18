@@ -446,9 +446,10 @@ internal sealed class PunchView
         var filePath = session.FilePath;
         var totalMinutesAll = session.Blocks.Where(b => !b.IsUnpaid).Sum(b => b.Length * 15);
         var totalFormatted = Duration.HumanizeTotal(totalMinutesAll);
-        var percent = totalMinutesAll * 100 / 480;
+        var targetMinutes = session.TargetHours * 60;
+        var percent = totalMinutesAll * 100 / targetMinutes;
         var statusLeftPlain = $"  {filePath}  ?=help F3=summary F4=tickets";
-        var statusRight = $"{totalFormatted}    {percent}% of 8h  ";
+        var statusRight = $"{totalFormatted}    {percent}% of {session.TargetHours}h  ";
         var padding = Math.Max(0, consoleWidth - statusLeftPlain.Length - statusRight.Length);
         var statusBar = $"[white on orangered1]  {Markup.Escape(filePath)}  [bold yellow]?=help F3=summary F4=tickets[/]{new string(' ', padding)}[bold white]{Markup.Escape(statusRight)}[/][/]";
         _layout["StatusBar"].Update(new Markup(statusBar));

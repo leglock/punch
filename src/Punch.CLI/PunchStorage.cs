@@ -61,6 +61,39 @@ internal static class PunchStorage
         return result;
     }
 
+    // The settings file sits alongside the data dir, e.g. ~/.punch/settings.json
+    // (parent of ~/.punch/data).
+    public static string GetSettingsFilePath()
+    {
+        var dataDir = GetDataDirectory();
+        var baseDir = Directory.GetParent(dataDir)?.FullName ?? dataDir;
+        return Path.Combine(baseDir, "settings.json");
+    }
+
+    // Loads user settings from settings.json. Returns defaults if the file is
+    // missing or cannot be parsed. TargetHours is clamped to a minimum of 1 to
+    // avoid a divide-by-zero when computing the workday percentage.
+    public static PunchSettings LoadSettings()
+    {
+        var path = GetSettingsFilePath();
+        if (!File.Exists(path))
+            return new PunchSettings();
+
+        try
+        {
+            var json = File.ReadAllText(path);
+            var settings = JsonSerializer.Deserialize<PunchSettings>(json,
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new PunchSettings();
+            if (settings.TargetHours < 1)
+                settings.TargetHours = 1;
+            return settings;
+        }
+        catch (JsonException)
+        {
+            return new PunchSettings();
+        }
+    }
+
     public static List<TimeBlock> Load(DateOnly date)
     {
         var path = GetFilePath(date);

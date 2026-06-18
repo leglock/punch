@@ -58,8 +58,8 @@ the entry. Navigating onto an existing entry selects it for editing or deletion.
 | Tab          | Switch input field                  |
 | Ctrl+E       | Edit selected entry                 |
 | Ctrl+D       | Delete selected entry               |
-| F3           | Ticket summary                      |
-| F4           | Pick a ticket for selected entry    |
+| F3 / Ctrl+T  | Ticket summary                      |
+| F4 / Ctrl+P  | Pick a ticket for selected entry    |
 | ?            | Toggle help                         |
 | Ctrl+Q, Q    | Quit                                |
 

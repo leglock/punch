@@ -37,18 +37,21 @@ internal sealed class PunchView
 
         var sorted = session.Blocks.OrderBy(b => b.StartSlot).ToList();
 
-        // Build the bar line: mark booked slots, then overlay selection
-        // Fixed pixels-per-slot for uniform block widths
-        var pixelsPerSlot = Math.Max(1, barWidth / 96);
-        var totalBarWidth = pixelsPerSlot * 96;
+        // Build the bar line by mapping the 96 day slots proportionally across the
+        // available width. (A fixed pixels-per-slot overflowed when the terminal
+        // was narrower than ~100 columns: 96 slots * 1px exceeded barWidth, so the
+        // bar wrapped onto a second line.) Mapping to barWidth fills the panel
+        // exactly and never overflows, at any width.
+        var totalBarWidth = barWidth;
+        int SlotToPixel(int slot) => (int)((long)slot * totalBarWidth / 96);
         var pixelState = new int[totalBarWidth]; // 0=free, 1=booked, 2=selected, 3=selected-existing
         var pixelBlockIndex = new int[totalBarWidth];
         Array.Fill(pixelBlockIndex, -1);
         for (var blockIdx = 0; blockIdx < sorted.Count; blockIdx++)
         {
             var block = sorted[blockIdx];
-            var bStart = block.StartSlot * pixelsPerSlot;
-            var bEndExcl = (block.StartSlot + block.Length) * pixelsPerSlot;
+            var bStart = SlotToPixel(block.StartSlot);
+            var bEndExcl = SlotToPixel(block.StartSlot + block.Length);
             bStart = Math.Clamp(bStart, 0, totalBarWidth);
             bEndExcl = Math.Clamp(bEndExcl, bStart, totalBarWidth);
             for (var px = bStart; px < bEndExcl; px++)
@@ -58,8 +61,8 @@ internal sealed class PunchView
             }
         }
 
-        var selStartPos = cursorSlot * pixelsPerSlot;
-        var selEndExcl = endSlot * pixelsPerSlot;
+        var selStartPos = SlotToPixel(cursorSlot);
+        var selEndExcl = SlotToPixel(endSlot);
         if (selEndExcl == selStartPos) selEndExcl = selStartPos + 1;
         selStartPos = Math.Clamp(selStartPos, 0, totalBarWidth - 1);
         var selEndPos = Math.Clamp(selEndExcl - 1, selStartPos, totalBarWidth - 1);
@@ -74,7 +77,7 @@ internal sealed class PunchView
         var hourMarkers = new[] { 0, 6, 12, 18, 24 };
         foreach (var h in hourMarkers)
         {
-            var pos = h * 4 * pixelsPerSlot;
+            var pos = SlotToPixel(h * 4);
             var label = h == 12 ? "12pm" : h < 12 ? $"{h}am" : $"{h - 12}pm";
             if (h == 0 || h == 24) label = "12am";
             // Right-align the end marker so it doesn't overflow
@@ -246,8 +249,8 @@ internal sealed class PunchView
             "[bold]Ctrl+D[/]      Delete selected entry\n" +
             "[bold]Ctrl+Q, Q[/]   Quit\n" +
             "[bold]?[/]           Toggle this help\n" +
-            "[bold]F3[/]          Ticket summary\n" +
-            "[bold]F4[/]          Pick ticket for entry");
+            "[bold]F3, Ctrl+T[/]   Ticket summary\n" +
+            "[bold]F4, Ctrl+P[/]   Pick ticket for entry");
         var helpContent = new Rows(
             titleLine,
             new Text(" "),

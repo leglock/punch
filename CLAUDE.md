@@ -47,8 +47,10 @@ The TUI has three modes driven by `PunchSession` state, handled in `PunchControl
 3. **Editing** (`selectedBlock != null, editing`) — input buffer is pre-filled with the block's label and ticket; Enter saves the edit (description must be non-empty).
 
 Two modal overlays layer over these modes (state on `PunchSession`):
-- **Ticket picker** (`ShowTicketPicker`, F4) — opens for the selected block when not editing; reloads `Tickets` from disk on open, arrows move `TicketPickerCursor`, Enter assigns the ticket to the block, Esc/F4 cancel. All other keys are swallowed while open.
-- **Ticket summary** (`ShowTicketSummary`, F3) — right-panel view summing hours per ticket with Billable/Unbillable subtotals (split on `TimeBlock.IsUnpaid`); F3/Esc closes.
+- **Ticket picker** (`ShowTicketPicker`, F4 or Ctrl+P) — opens for the selected block when not editing; reloads `Tickets` from disk on open, arrows move `TicketPickerCursor`, Enter assigns the ticket to the block, Esc/F4/Ctrl+P cancel. All other keys are swallowed while open.
+- **Ticket summary** (`ShowTicketSummary`, F3 or Ctrl+T) — right-panel view summing hours per ticket with Billable/Unbillable subtotals (split on `TimeBlock.IsUnpaid`); F3/Ctrl+T/Esc closes.
+
+The Ctrl+P/Ctrl+T aliases mirror F4/F3 so terminal recorders (VHS, used by `scripts/record-demo.sh` to refresh the README GIF) that can't send function keys can still drive the picker and summary.
 
 The input panel has two stacked fields (Description and Ticket) with Tab to switch focus. The active field shows a bold label and inverted cursor; the inactive field is dimmed. Ticket input is auto-uppercased. `PunchSession.ActiveField` (0=Description, 1=Ticket) tracks focus; `ActiveBuffer`/`ActiveCursor` route input to it.
 

@@ -7,17 +7,21 @@ namespace Punch.CLI;
 // The event loop mutates these in place and the renderer reads them.
 internal sealed class PunchSession
 {
-    public PunchSession(DaySchedule schedule, DateOnly workingDate, string filePath, int cursorSlot)
+    public PunchSession(DaySchedule schedule, DateOnly workingDate, string filePath, int cursorSlot, int targetHours = 8)
     {
         Schedule = schedule;
         WorkingDate = workingDate;
         FilePath = filePath;
         CursorSlot = cursorSlot;
+        TargetHours = targetHours;
     }
 
     public DaySchedule Schedule { get; }
     public DateOnly WorkingDate { get; }
     public string FilePath { get; }
+
+    // The daily workday goal in whole hours, used for the status-bar percentage.
+    public int TargetHours { get; }
 
     public IReadOnlyList<TimeBlock> Blocks => Schedule.Blocks;
 

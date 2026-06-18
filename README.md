@@ -78,6 +78,16 @@ PROJ-123,Fix login redirect
 PROJ-456,Quarterly report export
 ```
 
+To change the daily hours goal used for the status-bar percentage, create a
+`~/.punch/settings.json` file. `targetHours` takes a whole number and defaults to
+8 when the file is absent.
+
+```json
+{
+  "targetHours": 6
+}
+```
+
 ## Development
 
 ```bash

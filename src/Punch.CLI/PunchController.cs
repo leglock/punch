@@ -66,7 +66,7 @@ internal sealed class PunchController
             }
 
             // Ticket picker is modal: arrows move the highlight, Enter assigns,
-            // Esc/F4 cancel; all other keys are swallowed.
+            // Esc/F4/Ctrl+P cancel; all other keys are swallowed.
             if (_session.ShowTicketPicker)
             {
                 switch (key.Key)
@@ -86,13 +86,19 @@ internal sealed class PunchController
                     case ConsoleKey.F4:
                         _session.ShowTicketPicker = false;
                         break;
+                    case ConsoleKey.P when key.Modifiers.HasFlag(ConsoleModifiers.Control):
+                        _session.ShowTicketPicker = false;
+                        break;
                 }
                 Render(ctx);
                 continue;
             }
 
-            // F4 opens the ticket picker for the selected block (not while editing).
-            if (key.Key == ConsoleKey.F4 && _session.SelectedBlock != null && !_session.Editing)
+            // F4 (or Ctrl+P, for terminals/recorders that can't send F-keys) opens
+            // the ticket picker for the selected block (not while editing).
+            if ((key.Key == ConsoleKey.F4
+                    || (key.Key == ConsoleKey.P && key.Modifiers.HasFlag(ConsoleModifiers.Control)))
+                && _session.SelectedBlock != null && !_session.Editing)
             {
                 _session.Tickets = PunchStorage.LoadTickets();
                 _session.TicketPickerCursor = 0;
@@ -101,10 +107,11 @@ internal sealed class PunchController
                 continue;
             }
 
-            // Esc/F3 dismiss the ticket summary; other keys are swallowed.
+            // Esc/F3/Ctrl+T dismiss the ticket summary; other keys are swallowed.
             if (_session.ShowTicketSummary)
             {
-                if (key.Key == ConsoleKey.F3 || key.Key == ConsoleKey.Escape)
+                if (key.Key == ConsoleKey.F3 || key.Key == ConsoleKey.Escape
+                    || (key.Key == ConsoleKey.T && key.Modifiers.HasFlag(ConsoleModifiers.Control)))
                 {
                     _session.ShowTicketSummary = false;
                     Render(ctx);
@@ -112,7 +119,10 @@ internal sealed class PunchController
                 continue;
             }
 
-            if (key.Key == ConsoleKey.F3)
+            // F3 (or Ctrl+T, for terminals/recorders that can't send F-keys) opens
+            // the ticket summary.
+            if (key.Key == ConsoleKey.F3
+                || (key.Key == ConsoleKey.T && key.Modifiers.HasFlag(ConsoleModifiers.Control)))
             {
                 _session.ShowTicketSummary = true;
                 Render(ctx);

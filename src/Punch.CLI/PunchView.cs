@@ -37,13 +37,14 @@ internal sealed class PunchView
 
         var sorted = session.Blocks.OrderBy(b => b.StartSlot).ToList();
 
-        // Build the bar line by mapping the 96 day slots proportionally across the
-        // available width. (A fixed pixels-per-slot overflowed when the terminal
-        // was narrower than ~100 columns: 96 slots * 1px exceeded barWidth, so the
-        // bar wrapped onto a second line.) Mapping to barWidth fills the panel
-        // exactly and never overflows, at any width.
-        var totalBarWidth = barWidth;
-        int SlotToPixel(int slot) => (int)((long)slot * totalBarWidth / 96);
+        // Use a fixed pixels-per-slot so every 15-min segment is the same width.
+        // On terminals narrower than 96 columns barWidth/96 rounds to 0, so fall
+        // back to proportional mapping to prevent bar overflow.
+        var pixelsPerSlot = barWidth / 96;
+        int SlotToPixel(int slot) => pixelsPerSlot > 0
+            ? slot * pixelsPerSlot
+            : (int)((long)slot * barWidth / 96);
+        var totalBarWidth = pixelsPerSlot > 0 ? pixelsPerSlot * 96 : barWidth;
         var pixelState = new int[totalBarWidth]; // 0=free, 1=booked, 2=selected, 3=selected-existing
         var pixelBlockIndex = new int[totalBarWidth];
         Array.Fill(pixelBlockIndex, -1);

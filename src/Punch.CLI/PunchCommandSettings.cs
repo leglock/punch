@@ -12,4 +12,8 @@ internal sealed class PunchCommandSettings : CommandSettings
     [Description("Working date override (format: yyyy-MM-dd)")]
     [CommandOption("-d|--date")]
     public string? Date { get; set; }
+
+    [Description("Open yesterday's timesheet")]
+    [CommandOption("-y|--yesterday")]
+    public bool Yesterday { get; set; }
 }

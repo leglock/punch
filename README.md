@@ -40,6 +40,7 @@ Prebuilt self-contained binaries for Windows and Linux are attached to each [Git
 ```bash
 punch                          # Open today
 punch --date 2026-05-04        # Open a specific date (yyyy-MM-dd)
+punch --yesterday              # Open yesterday's timesheet
 punch --version                # Show version information
 ```
 

@@ -6,6 +6,13 @@ namespace Punch.CLI;
 
 internal sealed class PunchCommand : Command<PunchCommandSettings>
 {
+    private readonly IAnsiConsole _console;
+
+    public PunchCommand(IAnsiConsole console)
+    {
+        _console = console;
+    }
+
     public override int Execute(CommandContext context, PunchCommandSettings settings)
     {
         if (settings.Version)
@@ -16,6 +23,12 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
             return 0;
         }
 
+        if (settings.Date != null && settings.Yesterday)
+        {
+            Console.Error.WriteLine("Cannot combine --date and --yesterday.");
+            return 1;
+        }
+
         DateOnly workingDate;
         if (settings.Date != null)
         {
@@ -24,6 +37,10 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                 Console.Error.WriteLine($"Invalid date format: '{settings.Date}'. Expected yyyy-MM-dd.");
                 return 1;
             }
+        }
+        else if (settings.Yesterday)
+        {
+            workingDate = DateOnly.FromDateTime(DateTime.Now).AddDays(-1);
         }
         else
         {
@@ -38,8 +55,8 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
         }
         catch (Exception ex)
         {
-            AnsiConsole.MarkupLine($"[bold red]Error:[/] Failed to load time log from [bold cyan]{Markup.Escape(filePath)}[/].");
-            AnsiConsole.MarkupLine($"[bold yellow]Reason:[/] {Markup.Escape(ex.Message)}");
+            _console.MarkupLine($"[bold red]Error:[/] Failed to load time log from [bold cyan]{Markup.Escape(filePath)}[/].");
+            _console.MarkupLine($"[bold yellow]Reason:[/] {Markup.Escape(ex.Message)}");
             return 1;
         }
 

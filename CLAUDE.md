@@ -16,6 +16,7 @@ dotnet test --collect:"XPlat Code Coverage"               # Run tests with cover
 dotnet run --project src/Punch.CLI                        # Run the app
 dotnet run --project src/Punch.CLI -- --version           # Show version
 dotnet run --project src/Punch.CLI -- --date 2026-05-04   # Open a specific date
+dotnet run --project src/Punch.CLI -- --yesterday         # Open yesterday's timesheet
 ```
 
 The TUI reads keys via `Console.ReadKey`, so it can't be driven by piped stdin or unit tests. To smoke-test interactively, drive the built dll through a **raw-mode** pseudo-terminal (Python `pty` + `tty.setraw` on both fds) — in cooked mode Ctrl+Q (XON) is swallowed by flow control. Run the dll directly to skip `dotnet run` chatter, and set `HOME` to a temp dir to isolate `~/.punch`.
@@ -32,7 +33,7 @@ Test suites that mutate the shared static `PunchStorage.DataDirectoryOverride` m
 - **`DaySchedule`** — aggregate owning the block list **and** the 96-slot `occupied[]` mask as an invariant. The ONLY place occupancy is mutated — never touch a raw `occupied[]` outside it. Exposes `Add/Remove/Replace/FindAt/IsFree/IsOverlapping/CanGrow/AdvanceAfterAdd`, plus `FreeSlots`/`FillSlots` for the Ctrl+E edit lift.
 - **`PunchView`** — all Spectre rendering, split into `RenderTimeline/Messages/Help/TicketSummary/TicketPicker/Input/StatusBar`, driven by the `PunchSession`. The ticket picker renders beside the time log.
 - **`SlotTime` / `Duration`** — slot↔clock-time conversion and human-readable duration formatting (`Humanize` for entries, `HumanizeTotal` for totals).
-- **`PunchCommandSettings`** — CLI options: `--version`/`-v`, `--date`/`-d` (yyyy-MM-dd override).
+- **`PunchCommandSettings`** — CLI options: `--version`/`-v`, `--date`/`-d` (yyyy-MM-dd override), `--yesterday`/`-y` (previous day; mutually exclusive with `--date`).
 - **`TimeBlock`** — immutable record representing a booked time slot (StartSlot, Length, Label, Ticket). Slots are 0–95 (96 quarter-hours in a day). Ticket is optional (defaults to `""`). The `IsUnpaid` computed property (case-insensitive "lunch" or "break" substring match on Label) is used to exclude lunch and break blocks from the workday total.
 - **`PunchStorage`** — static helper for JSON persistence. One file per day at `~/.punch/data/yyyy-MM-dd.json` (override via `DataDirectoryOverride` — used by tests to isolate to a temp dir). Auto-saves on every add, edit, and delete. Validates blocks on load (skips invalid ranges and overlaps).
 - **`PunchStorage.LoadTickets`** — reads the manually-maintained `~/.punch/tickets.txt` (tab- or comma-separated `ticket,title` rows; `#` comments and blank lines skipped). Returns `TicketEntry` rows for the picker; missing file yields an empty list.

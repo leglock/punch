@@ -9,16 +9,21 @@ internal sealed class PunchController
 {
     private readonly PunchSession _session;
     private readonly PunchView _view;
+    private readonly Func<int> _windowHeight;
 
     // Two-step confirmations for quit (Ctrl+Q then Q) and delete (Ctrl+D then D).
     private bool _confirming;
     private bool _confirmingDelete;
 
-    public PunchController(PunchSession session, PunchView view)
+    public PunchController(PunchSession session, PunchView view, Func<int>? windowHeight = null)
     {
         _session = session;
         _view = view;
+        _windowHeight = windowHeight ?? (() => System.Console.WindowHeight);
     }
+
+    internal bool IsConfirmingQuit => _confirming;
+    internal bool IsConfirmingDelete => _confirmingDelete;
 
     private DaySchedule Schedule => _session.Schedule;
 
@@ -29,132 +34,129 @@ internal sealed class PunchController
         while (true)
         {
             var key = System.Console.ReadKey(true);
-
-            // Two-step quit: Q confirms, anything else cancels.
-            if (_confirming)
-            {
-                if (key.Key == ConsoleKey.Q)
-                    break;
-                _confirming = false;
-                Render(ctx);
-                continue;
-            }
-
-            // Two-step delete: D confirms, anything else cancels.
-            if (_confirmingDelete)
-            {
-                if (key.Key == ConsoleKey.D)
-                    DeleteSelected();
-                _confirmingDelete = false;
-                Render(ctx);
-                continue;
-            }
-
-            if (key.Key == ConsoleKey.Q && key.Modifiers.HasFlag(ConsoleModifiers.Control))
-            {
-                _confirming = true;
-                Render(ctx);
-                continue;
-            }
-
-            // Any key dismisses help.
-            if (_session.ShowHelp)
-            {
-                _session.ShowHelp = false;
-                Render(ctx);
-                continue;
-            }
-
-            // Ticket picker is modal: arrows move the highlight, Enter assigns,
-            // Esc/F4/Ctrl+P cancel; all other keys are swallowed.
-            if (_session.ShowTicketPicker)
-            {
-                switch (key.Key)
-                {
-                    case ConsoleKey.UpArrow:
-                        if (_session.TicketPickerCursor > 0)
-                            _session.TicketPickerCursor--;
-                        break;
-                    case ConsoleKey.DownArrow:
-                        if (_session.TicketPickerCursor < _session.Tickets.Count - 1)
-                            _session.TicketPickerCursor++;
-                        break;
-                    case ConsoleKey.Enter:
-                        ApplyTicketPick();
-                        break;
-                    case ConsoleKey.Escape:
-                    case ConsoleKey.F4:
-                        _session.ShowTicketPicker = false;
-                        break;
-                    case ConsoleKey.P when key.Modifiers.HasFlag(ConsoleModifiers.Control):
-                        _session.ShowTicketPicker = false;
-                        break;
-                }
-                Render(ctx);
-                continue;
-            }
-
-            // F4 (or Ctrl+P, for terminals/recorders that can't send F-keys) opens
-            // the ticket picker for the selected block (not while editing).
-            if ((key.Key == ConsoleKey.F4
-                    || (key.Key == ConsoleKey.P && key.Modifiers.HasFlag(ConsoleModifiers.Control)))
-                && _session.SelectedBlock != null && !_session.Editing)
-            {
-                _session.Tickets = PunchStorage.LoadTickets();
-                _session.TicketPickerCursor = 0;
-                _session.ShowTicketPicker = true;
-                Render(ctx);
-                continue;
-            }
-
-            // Esc/F3/Ctrl+T dismiss the ticket summary; other keys are swallowed.
-            if (_session.ShowTicketSummary)
-            {
-                if (key.Key == ConsoleKey.F3 || key.Key == ConsoleKey.Escape
-                    || (key.Key == ConsoleKey.T && key.Modifiers.HasFlag(ConsoleModifiers.Control)))
-                {
-                    _session.ShowTicketSummary = false;
-                    Render(ctx);
-                }
-                continue;
-            }
-
-            // F3 (or Ctrl+T, for terminals/recorders that can't send F-keys) opens
-            // the ticket summary.
-            if (key.Key == ConsoleKey.F3
-                || (key.Key == ConsoleKey.T && key.Modifiers.HasFlag(ConsoleModifiers.Control)))
-            {
-                _session.ShowTicketSummary = true;
-                Render(ctx);
-                continue;
-            }
-
-            // Toggle help when not typing: a selected block parks the input
-            // fields, so '?' is free over an occupied slot. With a free cursor
-            // it only toggles when the input fields are empty so '?' can still
-            // be typed into a description.
-            if (key.KeyChar == '?' && !_session.Editing
-                && (_session.SelectedBlock != null
-                    || (_session.InputBuffer.Length == 0 && _session.TicketBuffer.Length == 0)))
-            {
-                _session.ShowHelp = !_session.ShowHelp;
-                Render(ctx);
-                continue;
-            }
-
-            if (key.Key == ConsoleKey.D && key.Modifiers.HasFlag(ConsoleModifiers.Control) && _session.SelectedBlock != null)
-            {
-                _confirmingDelete = true;
-                Render(ctx);
-                continue;
-            }
-
-            DispatchKey(key);
-
-            AutoScrollToSelection();
-            ClampScrollOffset();
+            if (HandleKey(key))
+                break;
             Render(ctx);
         }
+    }
+
+    // Processes one keypress. Returns true when the app should quit.
+    internal bool HandleKey(ConsoleKeyInfo key)
+    {
+        // Two-step quit: Q confirms, anything else cancels.
+        if (_confirming)
+        {
+            if (key.Key == ConsoleKey.Q)
+                return true;
+            _confirming = false;
+            return false;
+        }
+
+        // Two-step delete: D confirms, anything else cancels.
+        if (_confirmingDelete)
+        {
+            if (key.Key == ConsoleKey.D)
+                DeleteSelected();
+            _confirmingDelete = false;
+            return false;
+        }
+
+        if (key.Key == ConsoleKey.Q && key.Modifiers.HasFlag(ConsoleModifiers.Control))
+        {
+            _confirming = true;
+            return false;
+        }
+
+        // Any key dismisses help.
+        if (_session.ShowHelp)
+        {
+            _session.ShowHelp = false;
+            return false;
+        }
+
+        // Ticket picker is modal: arrows move the highlight, Enter assigns,
+        // Esc/F4/Ctrl+P cancel; all other keys are swallowed.
+        if (_session.ShowTicketPicker)
+        {
+            switch (key.Key)
+            {
+                case ConsoleKey.UpArrow:
+                    if (_session.TicketPickerCursor > 0)
+                        _session.TicketPickerCursor--;
+                    break;
+                case ConsoleKey.DownArrow:
+                    if (_session.TicketPickerCursor < _session.Tickets.Count - 1)
+                        _session.TicketPickerCursor++;
+                    break;
+                case ConsoleKey.Enter:
+                    ApplyTicketPick();
+                    break;
+                case ConsoleKey.Escape:
+                case ConsoleKey.F4:
+                    _session.ShowTicketPicker = false;
+                    break;
+                case ConsoleKey.P when key.Modifiers.HasFlag(ConsoleModifiers.Control):
+                    _session.ShowTicketPicker = false;
+                    break;
+            }
+            return false;
+        }
+
+        // F4 (or Ctrl+P, for terminals/recorders that can't send F-keys) opens
+        // the ticket picker for the selected block (not while editing).
+        if ((key.Key == ConsoleKey.F4
+                || (key.Key == ConsoleKey.P && key.Modifiers.HasFlag(ConsoleModifiers.Control)))
+            && _session.SelectedBlock != null && !_session.Editing)
+        {
+            _session.Tickets = PunchStorage.LoadTickets();
+            _session.TicketPickerCursor = 0;
+            _session.ShowTicketPicker = true;
+            return false;
+        }
+
+        // Esc/F3/Ctrl+T dismiss the ticket summary; other keys are swallowed.
+        if (_session.ShowTicketSummary)
+        {
+            if (key.Key == ConsoleKey.F3 || key.Key == ConsoleKey.Escape
+                || (key.Key == ConsoleKey.T && key.Modifiers.HasFlag(ConsoleModifiers.Control)))
+            {
+                _session.ShowTicketSummary = false;
+            }
+            return false;
+        }
+
+        // F3 (or Ctrl+T, for terminals/recorders that can't send F-keys) opens
+        // the ticket summary.
+        if (key.Key == ConsoleKey.F3
+            || (key.Key == ConsoleKey.T && key.Modifiers.HasFlag(ConsoleModifiers.Control)))
+        {
+            _session.ShowTicketSummary = true;
+            return false;
+        }
+
+        // Toggle help when not typing: a selected block parks the input
+        // fields, so '?' is free over an occupied slot. With a free cursor
+        // it only toggles when the input fields are empty so '?' can still
+        // be typed into a description.
+        if (key.KeyChar == '?' && !_session.Editing
+            && (_session.SelectedBlock != null
+                || (_session.InputBuffer.Length == 0 && _session.TicketBuffer.Length == 0)))
+        {
+            _session.ShowHelp = !_session.ShowHelp;
+            return false;
+        }
+
+        if (key.Key == ConsoleKey.D && key.Modifiers.HasFlag(ConsoleModifiers.Control) && _session.SelectedBlock != null)
+        {
+            _confirmingDelete = true;
+            return false;
+        }
+
+        DispatchKey(key);
+
+        AutoScrollToSelection();
+        ClampScrollOffset();
+        return false;
     }
 
     private void DispatchKey(ConsoleKeyInfo key)
@@ -430,7 +432,7 @@ internal sealed class PunchController
             return;
 
         // When scrolled, the "more above" indicator takes 1 line.
-        var visHeight = Math.Max(1, System.Console.WindowHeight - 10 - 2 - 1);
+        var visHeight = Math.Max(1, _windowHeight() - 10 - 2 - 1);
         if (selIdx < _session.LogScrollOffset)
             _session.LogScrollOffset = selIdx;
         else if (selIdx >= _session.LogScrollOffset + visHeight)
@@ -441,7 +443,7 @@ internal sealed class PunchController
     {
         // When scrolled down, the "▲ more above" indicator takes 1 line, so only
         // viewHeight-1 block rows are visible at the bottom.
-        var viewHeight = Math.Max(1, System.Console.WindowHeight - 10 - 2);
+        var viewHeight = Math.Max(1, _windowHeight() - 10 - 2);
         var maxOff = Math.Max(0, Schedule.Count - (viewHeight - 1));
         _session.LogScrollOffset = Math.Clamp(_session.LogScrollOffset, 0, maxOff);
     }

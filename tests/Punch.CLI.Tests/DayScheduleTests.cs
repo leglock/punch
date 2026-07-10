@@ -90,4 +90,80 @@ public class DayScheduleTests
         Assert.True(schedule.IsOverlapping(8, 4));
         Assert.False(schedule.IsOverlapping(12, 4));
     }
+
+    [Fact]
+    public void Replace_WhenOldBlockNotFound_ReturnsOldBlockUnchanged()
+    {
+        var existing = new TimeBlock(10, 2, "task", "");
+        var schedule = new DaySchedule(new[] { existing });
+
+        var absent = new TimeBlock(20, 2, "other", "");
+        var replacement = absent with { Label = "changed" };
+        var result = schedule.Replace(absent, replacement);
+
+        Assert.Equal(absent, result);
+        Assert.Equal(existing, Assert.Single(schedule.Blocks));
+        Assert.False(schedule.IsFree(10));
+        Assert.False(schedule.IsFree(11));
+        Assert.True(schedule.IsFree(20));
+    }
+
+    [Fact]
+    public void Replace_WithLongerBlock_OccupiesGrownTail()
+    {
+        var original = new TimeBlock(10, 2, "task", "");
+        var schedule = new DaySchedule(new[] { original });
+
+        var longer = original with { Length = 4 };
+        schedule.Replace(original, longer);
+
+        Assert.False(schedule.IsFree(10));
+        Assert.False(schedule.IsFree(12));
+        Assert.False(schedule.IsFree(13));
+        Assert.Equal(longer, Assert.Single(schedule.Blocks));
+    }
+
+    [Fact]
+    public void Remove_AbsentBlock_LeavesOccupancyUntouched()
+    {
+        var block = new TimeBlock(10, 2, "task", "");
+        var schedule = new DaySchedule(new[] { block });
+
+        // Records use value equality, so a different label means a different block.
+        schedule.Remove(block with { Label = "other" });
+
+        Assert.False(schedule.IsFree(10));
+        Assert.False(schedule.IsFree(11));
+        Assert.Equal(1, schedule.Count);
+    }
+
+    [Theory]
+    [InlineData(-1)]
+    [InlineData(96)]
+    [InlineData(200)]
+    public void IsFree_OutOfRangeSlot_ReturnsFalse(int slot)
+    {
+        var schedule = new DaySchedule(new List<TimeBlock>());
+
+        Assert.False(schedule.IsFree(slot));
+    }
+
+    [Fact]
+    public void IsFree_BoundarySlots_TrueOnEmptySchedule()
+    {
+        var schedule = new DaySchedule(new List<TimeBlock>());
+
+        Assert.True(schedule.IsFree(0));
+        Assert.True(schedule.IsFree(95));
+    }
+
+    [Fact]
+    public void IsOverlapping_RangeExtendingPast96_ClampsWithoutThrowing()
+    {
+        var schedule = new DaySchedule(new[] { new TimeBlock(95, 1, "task", "") });
+        Assert.True(schedule.IsOverlapping(94, 5));
+
+        var empty = new DaySchedule(new List<TimeBlock>());
+        Assert.False(empty.IsOverlapping(94, 10));
+    }
 }

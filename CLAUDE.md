@@ -38,8 +38,8 @@ Test suites that mutate the shared static `PunchStorage.DataDirectoryOverride` m
 - **`PunchStorage`** — static helper for JSON persistence. One file per day at `~/.punch/data/yyyy-MM-dd.json` (override via `DataDirectoryOverride` — used by tests to isolate to a temp dir). Auto-saves on every add, edit, and delete. Validates blocks on load (skips invalid ranges and overlaps).
 - **`PunchStorage.LoadTickets`** — reads the manually-maintained `~/.punch/tickets.txt` (tab- or comma-separated `ticket,title` rows; `#` comments and blank lines skipped). Returns `TicketEntry` rows for the picker; missing file yields an empty list.
 - **`TicketEntry`** — immutable record (`Ticket`, `Title`) for one row of `tickets.txt`, used by the ticket picker overlay.
-- **`PunchStorage.LoadSettings`** — reads the manually-maintained `~/.punch/settings.json` (sits alongside the data dir). Returns a `PunchSettings`; a missing or unparseable file yields defaults. The only key today is `targetHours` (whole-hour daily goal, default 8, clamped to ≥1) used for the status-bar percentage.
-- **`PunchSettings`** — JSON DTO for `settings.json`; `TargetHours` is threaded through `PunchSession` into `PunchView.RenderStatusBar`.
+- **`PunchStorage.LoadSettings`** — reads the manually-maintained `~/.punch/settings.json` (sits alongside the data dir). Returns a `PunchSettings`; a missing or unparseable file yields defaults. Keys: `targetHours` (whole-hour daily goal, default 8, clamped to ≥1) and optional `targetHoursByDay` (per-weekday overrides keyed by case-insensitive day name; `0` = day off), both used for the status-bar percentage.
+- **`PunchSettings`** — JSON DTO for `settings.json`; `GetTargetHours(DayOfWeek)` resolves the per-day override (clamped ≥0) or falls back to `TargetHours`, and the resolved value is threaded through `PunchSession` into `PunchView.RenderStatusBar` (which omits the percentage when the target is 0).
 - **`PunchData` / `TimeBlockDto`** — JSON serialization DTOs.
 
 ### TUI State Model

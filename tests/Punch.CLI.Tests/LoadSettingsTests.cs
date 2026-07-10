@@ -63,4 +63,42 @@ public class LoadSettingsTests : IDisposable
 
         Assert.Equal(1, PunchStorage.LoadSettings().TargetHours);
     }
+
+    [Fact]
+    public void GetTargetHours_UsesPerDayOverrideAndFallsBack()
+    {
+        File.WriteAllText(_settingsPath,
+            """{ "targetHours": 8, "targetHoursByDay": { "friday": 4, "saturday": 0 } }""");
+
+        var settings = PunchStorage.LoadSettings();
+        Assert.Equal(4, settings.GetTargetHours(DayOfWeek.Friday));
+        Assert.Equal(0, settings.GetTargetHours(DayOfWeek.Saturday));
+        Assert.Equal(8, settings.GetTargetHours(DayOfWeek.Monday));
+    }
+
+    [Fact]
+    public void GetTargetHours_MatchesDayNamesCaseInsensitively()
+    {
+        File.WriteAllText(_settingsPath,
+            """{ "targetHoursByDay": { "SUNDAY": 2 } }""");
+
+        Assert.Equal(2, PunchStorage.LoadSettings().GetTargetHours(DayOfWeek.Sunday));
+    }
+
+    [Fact]
+    public void GetTargetHours_ClampsNegativePerDayValuesToZero()
+    {
+        File.WriteAllText(_settingsPath,
+            """{ "targetHoursByDay": { "sunday": -3 } }""");
+
+        Assert.Equal(0, PunchStorage.LoadSettings().GetTargetHours(DayOfWeek.Sunday));
+    }
+
+    [Fact]
+    public void GetTargetHours_FallsBackToFlatTargetWhenNoMap()
+    {
+        File.WriteAllText(_settingsPath, """{ "targetHours": 6 }""");
+
+        Assert.Equal(6, PunchStorage.LoadSettings().GetTargetHours(DayOfWeek.Wednesday));
+    }
 }

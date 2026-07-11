@@ -75,6 +75,13 @@ internal sealed class PunchView
         // Build hour labels line
         var labelChars = new char[totalBarWidth];
         Array.Fill(labelChars, ' ');
+        // Hour ticks turn the label line into a ruler. Skip them on narrow
+        // terminals (proportional fallback) where they'd land on top of each other.
+        if (pixelsPerSlot >= 1)
+        {
+            for (var h = 1; h < 24; h++)
+                labelChars[SlotToPixel(h * 4)] = '╵';
+        }
         var hourMarkers = new[] { 0, 6, 12, 18, 24 };
         foreach (var h in hourMarkers)
         {
@@ -85,6 +92,27 @@ internal sealed class PunchView
             if (h == 24) pos = totalBarWidth - label.Length;
             for (var i = 0; i < label.Length && pos + i < totalBarWidth; i++)
                 labelChars[pos + i] = label[i];
+        }
+
+        // "Now" marker: when viewing today, point at the current time under the
+        // bar so the day has an anchor. Nudge off hour-label text if it collides.
+        var nowMarkerPos = -1;
+        if (session.WorkingDate == DateOnly.FromDateTime(DateTime.Now))
+        {
+            var minutesOfDay = (int)DateTime.Now.TimeOfDay.TotalMinutes;
+            var pos = Math.Clamp((int)((long)minutesOfDay * totalBarWidth / 1440), 0, totalBarWidth - 1);
+            foreach (var offset in new[] { 0, 1, -1, 2, -2, 3, -3, 4, -4 })
+            {
+                var candidate = pos + offset;
+                if (candidate < 0 || candidate >= totalBarWidth) continue;
+                if (labelChars[candidate] == ' ' || labelChars[candidate] == '╵')
+                {
+                    pos = candidate;
+                    break;
+                }
+            }
+            labelChars[pos] = '▲';
+            nowMarkerPos = pos;
         }
 
         // Position the time label above the selection midpoint
@@ -128,14 +156,29 @@ internal sealed class PunchView
         var pad = Math.Max(0, (barWidth - totalBarWidth) / 2);
         var padStr = new string(' ', pad);
 
+        // Render the labels line, lifting the now marker out of the dim span so
+        // it stands out in the accent color.
+        var labelsLine = new string(labelChars);
+        string labelsMarkup;
+        if (nowMarkerPos >= 0)
+        {
+            var left = Markup.Escape(padStr + labelsLine[..nowMarkerPos]);
+            var right = Markup.Escape(labelsLine[(nowMarkerPos + 1)..]);
+            labelsMarkup = $"[dim]{left}[/][bold orangered1]▲[/][dim]{right}[/]";
+        }
+        else
+        {
+            labelsMarkup = $"[dim]{Markup.Escape(padStr + labelsLine)}[/]";
+        }
+
         var timelineContent = new Rows(
             new Markup($"[bold]{Markup.Escape(padStr + topLine)}[/]"),
             new Markup(padStr + barMarkup.ToString()),
-            new Markup($"[dim]{Markup.Escape(padStr + new string(labelChars))}[/]"));
+            new Markup(labelsMarkup));
 
         _layout["Timeline"].Update(
             new Panel(timelineContent)
-                .Header("Timeline")
+                .Header($"Timeline · {session.WorkingDate:dddd, MMM d}")
                 .Expand()
                 .Border(BoxBorder.Rounded));
     }
@@ -229,8 +272,11 @@ internal sealed class PunchView
             messagesContent = new Rows(renderables);
         }
 
+        var header = sorted.Count == 0
+            ? "Time Logged"
+            : $"Time Logged · {sorted.Count} {(sorted.Count == 1 ? "entry" : "entries")}";
         return new Panel(messagesContent)
-            .Header("Time Logged")
+            .Header(header)
             .Expand()
             .Border(BoxBorder.Rounded);
     }
@@ -451,19 +497,33 @@ internal sealed class PunchView
         var totalMinutesAll = session.Blocks.Where(b => !b.IsUnpaid).Sum(b => b.Length * 15);
         var totalFormatted = Duration.HumanizeTotal(totalMinutesAll);
         var statusLeftPlain = $"  {filePath}  ?=help F3=summary F4=tickets";
-        string statusRight;
+        string statusRightPlain;
+        string statusRightMarkup;
         if (session.TargetHours > 0)
         {
             var targetMinutes = session.TargetHours * 60;
             var percent = totalMinutesAll * 100 / targetMinutes;
-            statusRight = $"{totalFormatted}    {percent}% of {session.TargetHours}h  ";
+            // 10-cell gauge toward the daily target; the percent keeps counting
+            // past 100 but the gauge pegs at full.
+            var filled = Math.Clamp(totalMinutesAll * 10 / targetMinutes, 0, 10);
+            var gaugeFilled = new string('▰', filled);
+            var gaugeEmpty = new string('▱', 10 - filled);
+            statusRightPlain = $"{totalFormatted}  {gaugeFilled}{gaugeEmpty}  {percent}% of {session.TargetHours}h  ";
+            statusRightMarkup = $"[bold white]{Markup.Escape(totalFormatted)}  [/][bold yellow]{gaugeFilled}[/][dim]{gaugeEmpty}[/][bold white]  {percent}% of {session.TargetHours}h  [/]";
+            // On narrow terminals the gauge is the first thing to go.
+            if (statusLeftPlain.Length + statusRightPlain.Length > consoleWidth)
+            {
+                statusRightPlain = $"{totalFormatted}    {percent}% of {session.TargetHours}h  ";
+                statusRightMarkup = $"[bold white]{Markup.Escape(statusRightPlain)}[/]";
+            }
         }
         else
         {
-            statusRight = $"{totalFormatted}  ";
+            statusRightPlain = $"{totalFormatted}  ";
+            statusRightMarkup = $"[bold white]{Markup.Escape(statusRightPlain)}[/]";
         }
-        var padding = Math.Max(0, consoleWidth - statusLeftPlain.Length - statusRight.Length);
-        var statusBar = $"[white on orangered1]  {Markup.Escape(filePath)}  [bold yellow]?=help F3=summary F4=tickets[/]{new string(' ', padding)}[bold white]{Markup.Escape(statusRight)}[/][/]";
+        var padding = Math.Max(0, consoleWidth - statusLeftPlain.Length - statusRightPlain.Length);
+        var statusBar = $"[white on orangered1]  {Markup.Escape(filePath)}  [bold yellow]?=help F3=summary F4=tickets[/]{new string(' ', padding)}{statusRightMarkup}[/]";
         _layout["StatusBar"].Update(new Markup(statusBar));
     }
 

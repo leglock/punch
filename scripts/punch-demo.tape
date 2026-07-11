@@ -9,10 +9,11 @@ Output assets/punch-demo.gif
 
 Set Shell bash
 Set FontSize 20
-# Width 1216 makes the terminal's column grid fill the frame evenly, so the
-# panel borders sit symmetrically (1200 left a lopsided gap on the right that
-# read as the timeline bar "wrapping").
-Set Width 1216
+# Width 1440 yields a 106-column terminal — wide enough for the timeline's
+# per-hour tick ruler (needs >=100 cols for 1 px/slot) and the status-bar
+# target gauge (dropped below ~92 cols), while keeping the column grid
+# filling the frame evenly so panel borders sit symmetrically.
+Set Width 1440
 Set Height 768
 Set Padding 20
 Set Margin 48
@@ -23,8 +24,9 @@ Set TypingSpeed 90ms
 Env TERM xterm-256color
 
 # --- launch (hidden so build/shell noise stays out of the frame) ---
+# Open today (not a fixed --date) so the timeline's "now" marker renders.
 Hide
-Type "punch --date 2026-06-17"
+Type "punch"
 Enter
 Sleep 3s
 Show

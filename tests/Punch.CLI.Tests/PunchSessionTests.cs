@@ -34,6 +34,26 @@ public class PunchSessionTests
     }
 
     [Fact]
+    public void IsNonBillable_UsesDefaultRulesWhenNoMatcherGiven()
+    {
+        var session = CreateSession();
+
+        Assert.True(session.IsNonBillable(new TimeBlock(0, 4, "lunch")));
+        Assert.True(session.IsNonBillable(new TimeBlock(4, 4, "coffee break")));
+        Assert.False(session.IsNonBillable(new TimeBlock(8, 4, "breakfast")));
+    }
+
+    [Fact]
+    public void IsNonBillable_HonorsCustomMatcher()
+    {
+        var matcher = NonBillableMatcher.Create(new[] { new NonBillableRule { Word = "afk", Match = "exact" } });
+        var session = new PunchSession(new DaySchedule(new List<TimeBlock>()), new DateOnly(2026, 1, 15), "unused", 32, 8, matcher);
+
+        Assert.True(session.IsNonBillable(new TimeBlock(0, 4, "AFK")));
+        Assert.False(session.IsNonBillable(new TimeBlock(4, 4, "lunch")));
+    }
+
+    [Fact]
     public void IsInputActive_TrueWhenNoBlockSelected()
     {
         Assert.True(CreateSession().IsInputActive);

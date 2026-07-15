@@ -5,44 +5,6 @@ namespace Punch.CLI.Tests;
 
 public class TimeBlockTests
 {
-    [Theory]
-    [InlineData("Lunch")]
-    [InlineData("LUNCH break")]
-    [InlineData("team lunch")]
-    [InlineData("Out for Lunch with the crew")]
-    [InlineData("Break")]
-    [InlineData("coffee BREAK")]
-    [InlineData("short break with the team")]
-    [InlineData("lunch!")]
-    [InlineData("break-time")]
-    [InlineData("lunch/break")]
-    [InlineData("my lunch.")]
-    [InlineData("LuNcH")]
-    [InlineData("bReAk")]
-    public void IsUnpaid_DetectsLunchAndBreakLabelsCaseInsensitive(string label)
-    {
-        var block = new TimeBlock(0, 4, label);
-        Assert.True(block.IsUnpaid);
-    }
-
-    [Theory]
-    [InlineData("")]
-    [InlineData("meeting")]
-    [InlineData("standup")]
-    [InlineData("luncheon")]
-    [InlineData("breakfast")]
-    [InlineData("breaking changes")]
-    [InlineData("system breakdown")]
-    [InlineData("lunchbox")]
-    [InlineData("lunch1")]
-    [InlineData("1break")]
-    [InlineData("   ")]
-    public void IsUnpaid_ReturnsFalseForNonUnpaidLabelsAndSubstrings(string label)
-    {
-        var block = new TimeBlock(0, 4, label);
-        Assert.False(block.IsUnpaid);
-    }
-
     [Fact]
     public void Ticket_DefaultsToEmptyString()
     {

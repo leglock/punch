@@ -7,13 +7,14 @@ namespace Punch.CLI;
 // The event loop mutates these in place and the renderer reads them.
 internal sealed class PunchSession
 {
-    public PunchSession(DaySchedule schedule, DateOnly workingDate, string filePath, int cursorSlot, int targetHours = 8)
+    public PunchSession(DaySchedule schedule, DateOnly workingDate, string filePath, int cursorSlot, int targetHours = 8, NonBillableMatcher? nonBillable = null)
     {
         Schedule = schedule;
         WorkingDate = workingDate;
         FilePath = filePath;
         CursorSlot = cursorSlot;
         TargetHours = targetHours;
+        NonBillable = nonBillable ?? NonBillableMatcher.Default;
     }
 
     public DaySchedule Schedule { get; }
@@ -22,6 +23,12 @@ internal sealed class PunchSession
 
     // The daily workday goal in whole hours, used for the status-bar percentage.
     public int TargetHours { get; }
+
+    // The user's configured non-billable label rules, used to exclude blocks
+    // (lunch, breaks, ...) from the workday total.
+    public NonBillableMatcher NonBillable { get; }
+
+    public bool IsNonBillable(TimeBlock block) => NonBillable.IsNonBillable(block.Label);
 
     public IReadOnlyList<TimeBlock> Blocks => Schedule.Blocks;
 

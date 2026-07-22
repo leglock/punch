@@ -69,7 +69,8 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
         }
 
         var appSettings = PunchStorage.LoadSettings();
-        var session = new PunchSession(schedule, workingDate, filePath, cursorSlot, appSettings.GetTargetHours(workingDate.DayOfWeek));
+        var session = new PunchSession(schedule, workingDate, filePath, cursorSlot,
+            appSettings.GetTargetHours(workingDate.DayOfWeek), appSettings.CreateNonBillableMatcher());
 
         AnsiConsole.AlternateScreen(() =>
         {

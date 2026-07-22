@@ -15,6 +15,13 @@ internal sealed class PunchSettings
     // marks a day off (the status bar then omits the percentage).
     public Dictionary<string, int>? TargetHoursByDay { get; set; }
 
+    // Optional rules marking blocks as non-billable by label. Null (key absent)
+    // falls back to the defaults (whole-word "lunch"/"break"); an empty list
+    // means nothing is non-billable.
+    public List<NonBillableRule>? NonBillable { get; set; }
+
+    public NonBillableMatcher CreateNonBillableMatcher() => NonBillableMatcher.Create(NonBillable);
+
     // Resolves the target for a given weekday: the per-day override if one is
     // present (clamped to >= 0), otherwise the flat TargetHours.
     public int GetTargetHours(DayOfWeek day)

@@ -135,7 +135,7 @@ internal sealed class PunchView
                 currentBlockIndex = pixelBlockIndex[i];
                 barMarkup.Append(currentState switch
                 {
-                    1 => currentBlockIndex >= 0 && currentBlockIndex < sorted.Count && sorted[currentBlockIndex].IsUnpaid
+                    1 => currentBlockIndex >= 0 && currentBlockIndex < sorted.Count && session.IsNonBillable(sorted[currentBlockIndex])
                             ? "[grey50]"
                             : currentBlockIndex % 2 == 0 ? "[orangered1]" : "[orange3]",
                     2 => "[bold yellow]",
@@ -257,7 +257,7 @@ internal sealed class PunchView
                 var blockIdx = sorted.IndexOf(b);
                 var squareColor = isSelected
                     ? "white"
-                    : b.IsUnpaid
+                    : session.IsNonBillable(b)
                         ? "grey50"
                         : blockIdx % 2 == 0 ? "orangered1" : "orange3";
                 var durationText = Duration.Humanize(b.Length * 15);
@@ -332,8 +332,8 @@ internal sealed class PunchView
             summaryLines.Add(new Markup($"  {ticketLabel} {dur}"));
         }
 
-        var billableMinutes = blocks.Where(b => !b.IsUnpaid).Sum(b => b.Length * 15);
-        var unbillableMinutes = blocks.Where(b => b.IsUnpaid).Sum(b => b.Length * 15);
+        var billableMinutes = blocks.Where(b => !session.IsNonBillable(b)).Sum(b => b.Length * 15);
+        var unbillableMinutes = blocks.Where(b => session.IsNonBillable(b)).Sum(b => b.Length * 15);
         var totalDur = Duration.HumanizeTotal(blocks.Sum(b => b.Length * 15));
         summaryLines.Add(new Markup($"  [dim]{new string('─', 28)}[/]"));
         summaryLines.Add(new Markup($"  {"Billable".PadRight(20)} {Duration.Humanize(billableMinutes)}"));
@@ -494,7 +494,7 @@ internal sealed class PunchView
     {
         var consoleWidth = System.Console.WindowWidth;
         var filePath = session.FilePath;
-        var totalMinutesAll = session.Blocks.Where(b => !b.IsUnpaid).Sum(b => b.Length * 15);
+        var totalMinutesAll = session.Blocks.Where(b => !session.IsNonBillable(b)).Sum(b => b.Length * 15);
         var totalFormatted = Duration.HumanizeTotal(totalMinutesAll);
         var statusLeftPlain = $"  {filePath}  ?=help F3=summary F4=tickets";
         string statusRightPlain;

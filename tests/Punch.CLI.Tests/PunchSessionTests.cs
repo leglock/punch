@@ -7,7 +7,7 @@ namespace Punch.CLI.Tests;
 
 public class PunchSessionTests
 {
-    private static PunchSession CreateSession(int targetHours = 8) =>
+    private static PunchSession CreateSession(decimal targetHours = 8) =>
         new(new DaySchedule(new List<TimeBlock>()), new DateOnly(2026, 1, 15), "unused", 32, targetHours);
 
     [Fact]
@@ -24,13 +24,19 @@ public class PunchSessionTests
         Assert.False(session.ShowTicketSummary);
         Assert.False(session.ShowTicketPicker);
         Assert.Empty(session.Tickets);
-        Assert.Equal(8, session.TargetHours);
+        Assert.Equal(8m, session.TargetHours);
     }
 
     [Fact]
     public void Constructor_HonorsExplicitTargetHours()
     {
-        Assert.Equal(6, CreateSession(targetHours: 6).TargetHours);
+        Assert.Equal(6m, CreateSession(targetHours: 6).TargetHours);
+    }
+
+    [Fact]
+    public void Constructor_HonorsDecimalTargetHours()
+    {
+        Assert.Equal(7.5m, CreateSession(targetHours: 7.5m).TargetHours);
     }
 
     [Fact]

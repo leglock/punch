@@ -71,8 +71,9 @@ internal static class PunchStorage
     }
 
     // Loads user settings from settings.json. Returns defaults if the file is
-    // missing or cannot be parsed. TargetHours is clamped to a minimum of 1 to
-    // avoid a divide-by-zero when computing the workday percentage.
+    // missing or cannot be parsed. TargetHours must be a positive 15-minute
+    // increment (0.25, 0.5, ...); invalid values fall back to the default so the
+    // workday percentage never divides by zero.
     public static PunchSettings LoadSettings()
     {
         var path = GetSettingsFilePath();
@@ -84,8 +85,8 @@ internal static class PunchStorage
             var json = File.ReadAllText(path);
             var settings = JsonSerializer.Deserialize<PunchSettings>(json,
                 new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new PunchSettings();
-            if (settings.TargetHours < 1)
-                settings.TargetHours = 1;
+            if (settings.TargetHours < 0.25m || !PunchSettings.IsQuarterIncrement(settings.TargetHours))
+                settings.TargetHours = 8;
             return settings;
         }
         catch (JsonException)

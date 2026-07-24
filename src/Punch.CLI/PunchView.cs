@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Reflection;
 using System.Text;
 using Spectre.Console;
@@ -501,19 +502,20 @@ internal sealed class PunchView
         string statusRightMarkup;
         if (session.TargetHours > 0)
         {
-            var targetMinutes = session.TargetHours * 60;
+            var targetMinutes = (int)(session.TargetHours * 60);
+            var targetLabel = session.TargetHours.ToString("0.##", CultureInfo.InvariantCulture);
             var percent = totalMinutesAll * 100 / targetMinutes;
             // 10-cell gauge toward the daily target; the percent keeps counting
             // past 100 but the gauge pegs at full.
             var filled = Math.Clamp(totalMinutesAll * 10 / targetMinutes, 0, 10);
             var gaugeFilled = new string('▰', filled);
             var gaugeEmpty = new string('▱', 10 - filled);
-            statusRightPlain = $"{totalFormatted}  {gaugeFilled}{gaugeEmpty}  {percent}% of {session.TargetHours}h  ";
-            statusRightMarkup = $"[bold white]{Markup.Escape(totalFormatted)}  [/][bold yellow]{gaugeFilled}[/][dim]{gaugeEmpty}[/][bold white]  {percent}% of {session.TargetHours}h  [/]";
+            statusRightPlain = $"{totalFormatted}  {gaugeFilled}{gaugeEmpty}  {percent}% of {targetLabel}h  ";
+            statusRightMarkup = $"[bold white]{Markup.Escape(totalFormatted)}  [/][bold yellow]{gaugeFilled}[/][dim]{gaugeEmpty}[/][bold white]  {percent}% of {targetLabel}h  [/]";
             // On narrow terminals the gauge is the first thing to go.
             if (statusLeftPlain.Length + statusRightPlain.Length > consoleWidth)
             {
-                statusRightPlain = $"{totalFormatted}    {percent}% of {session.TargetHours}h  ";
+                statusRightPlain = $"{totalFormatted}    {percent}% of {targetLabel}h  ";
                 statusRightMarkup = $"[bold white]{Markup.Escape(statusRightPlain)}[/]";
             }
         }

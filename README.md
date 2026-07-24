@@ -80,17 +80,20 @@ PROJ-456,Quarterly report export
 ```
 
 To change the daily hours goal used for the status-bar percentage, create a
-`~/.punch/settings.json` file. `targetHours` takes a whole number and defaults to
-8 when the file is absent. The optional `targetHoursByDay` object overrides the
-goal for specific weekdays (case-insensitive day names); days not listed fall
-back to `targetHours`. Set a day to `0` to mark it as a day off — the status
-bar then shows the total without a percentage.
+`~/.punch/settings.json` file. `targetHours` takes a number of hours in
+15-minute increments (`4`, `4.25`, `6.5`, `7.75`, …) and defaults to 8 when the
+file is absent. The optional `targetHoursByDay` object overrides the goal for
+specific weekdays (case-insensitive day names); days not listed fall back to
+`targetHours`. Set a day to `0` to mark it as a day off — the status bar then
+shows the total without a percentage. Values that aren't 15-minute increments
+are invalid: a per-day value falls back to `targetHours`, and an invalid
+`targetHours` falls back to the default 8.
 
 ```json
 {
   "targetHours": 8,
   "targetHoursByDay": {
-    "friday": 6,
+    "friday": 6.5,
     "saturday": 0,
     "sunday": 0
   }

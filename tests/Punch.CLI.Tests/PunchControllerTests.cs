@@ -734,6 +734,38 @@ public class PunchControllerTests : IDisposable
     }
 
     [Fact]
+    public void F4_ListsTicketsUsedOnTheDayAboveTheSavedOnes()
+    {
+        SeedTickets();
+        var (controller, session) = Create(cursorSlot: 12,
+            blocks: new[] { new TimeBlock(10, 2, "task", ""), new TimeBlock(20, 2, "Fix login bug", "PROJ-99") });
+        SelectByLeftArrow(controller);
+
+        controller.HandleKey(Key(ConsoleKey.F4));
+
+        Assert.Equal(3, session.Tickets.Count);
+        Assert.Equal(new TicketEntry("PROJ-99", "Fix login bug", FromLog: true), session.Tickets[0]);
+        Assert.Equal(new[] { "ABC-1", "DEF-2" }, session.Tickets.Skip(1).Select(t => t.Ticket));
+    }
+
+    [Fact]
+    public void PickerEnter_OnADayTicket_AssignsIt()
+    {
+        SeedTickets();
+        var (controller, session) = Create(cursorSlot: 12,
+            blocks: new[] { new TimeBlock(10, 2, "task", ""), new TimeBlock(20, 2, "Fix login bug", "PROJ-99") });
+        SelectByLeftArrow(controller);
+        controller.HandleKey(Key(ConsoleKey.F4));
+
+        controller.HandleKey(Key(ConsoleKey.Enter));
+
+        // Cursor 0 is the day ticket, so the flat list's indexing lines up.
+        Assert.Equal(new TimeBlock(10, 2, "task", "PROJ-99"), session.SelectedBlock);
+        Assert.Contains(new TimeBlock(10, 2, "task", "PROJ-99"), PunchStorage.Load(Date));
+        Assert.False(session.ShowTicketPicker);
+    }
+
+    [Fact]
     public void CtrlP_WithSelectedBlock_OpensPicker()
     {
         var (controller, session) = Create(cursorSlot: 12, blocks: new TimeBlock(10, 2, "task", ""));

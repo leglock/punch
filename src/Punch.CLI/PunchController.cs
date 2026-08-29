@@ -108,7 +108,7 @@ internal sealed class PunchController
                 || (key.Key == ConsoleKey.P && key.Modifiers.HasFlag(ConsoleModifiers.Control)))
             && _session.SelectedBlock != null && !_session.Editing)
         {
-            _session.Tickets = PunchStorage.LoadTickets();
+            _session.Tickets = TicketCatalog.Build(PunchStorage.LoadTickets(), Schedule.Blocks);
             _session.TicketPickerCursor = 0;
             _session.ShowTicketPicker = true;
             return false;

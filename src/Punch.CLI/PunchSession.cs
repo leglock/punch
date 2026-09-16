@@ -44,8 +44,10 @@ internal sealed class PunchSession
     public bool ShowTicketSummary { get; set; }
     public int LogScrollOffset { get; set; }
 
-    // Ticket picker overlay. Tickets is reloaded from disk each time the picker
-    // is opened, so edits to ~/.punch/tickets.txt are picked up without a restart.
+    // Ticket picker overlay. Tickets is rebuilt each time the picker is opened
+    // (TicketCatalog.Build over a fresh ~/.punch/tickets.txt read plus the day's
+    // own blocks), so edits to the file are picked up without a restart. The
+    // list is flat and fully selectable; group headers are a view concern.
     public bool ShowTicketPicker { get; set; }
     public int TicketPickerCursor { get; set; }
     public List<TicketEntry> Tickets { get; set; } = new();

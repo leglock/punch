@@ -380,6 +380,14 @@ internal sealed class PunchView
             var interior = Math.Max(3, consoleHeight - 10 - 2);
             var maxRows = Math.Max(1, interior - 2);
 
+            // Section headers are only worth drawing when both sources
+            // contributed; their two rows are reserved up front so the ▲/▼
+            // fixed point below can never overshoot the budget.
+            var logCount = session.Tickets.Count(t => t.FromLog);
+            var hasHeaders = logCount > 0 && logCount < session.Tickets.Count;
+            if (hasHeaders)
+                maxRows = Math.Max(1, maxRows - 2);
+
             // The picker occupies the right half of the content width; keep each
             // row to a single line so wrapping never eats into the row budget.
             var textWidth = Math.Max(8, System.Console.WindowWidth / 2 - 4);
@@ -414,6 +422,12 @@ internal sealed class PunchView
             for (var i = offset; i < offset + visibleRows && i < count; i++)
             {
                 var t = session.Tickets[i];
+                // Headers are emitted at a group boundary only when it falls
+                // inside the visible window.
+                if (hasHeaders && i == 0)
+                    lines.Add(new Markup("  [dim]── from the log ──[/]"));
+                else if (hasHeaders && i == logCount)
+                    lines.Add(new Markup("  [dim]── from tickets.txt ──[/]"));
                 // Prefix is 4 chars ("  > " / "    "); reserve the rest for the
                 // ticket + two-space gap + title, truncating the title to fit.
                 var title = Truncate(t.Title, Math.Max(1, textWidth - 4 - t.Ticket.Length - 2));

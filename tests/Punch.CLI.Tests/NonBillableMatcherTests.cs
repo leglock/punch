@@ -138,4 +138,13 @@ public class NonBillableMatcherTests
         Assert.True(matcher.IsNonBillable("team lunch"));
         Assert.True(matcher.IsNonBillable("AFK"));
     }
+
+    [Fact]
+    public void Create_SkipsNullRules()
+    {
+        var matcher = NonBillableMatcher.Create(new NonBillableRule?[] { null, new NonBillableRule { Word = "afk", Match = "exact" } }!);
+
+        Assert.True(matcher.IsNonBillable("AFK"));
+        Assert.False(matcher.IsNonBillable("lunch"));
+    }
 }

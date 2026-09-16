@@ -27,7 +27,8 @@ internal sealed class NonBillableMatcher
 
     // Builds a matcher from user rules. A null list (key absent from
     // settings.json) yields the defaults; an empty list matches nothing.
-    // Rules with a blank word or an unrecognized match mode are skipped.
+    // Null entries, rules with a blank word, and rules with an unrecognized
+    // match mode are skipped.
     public static NonBillableMatcher Create(IReadOnlyList<NonBillableRule>? rules)
     {
         if (rules is null)
@@ -37,6 +38,9 @@ internal sealed class NonBillableMatcher
         var exactWords = new List<string>();
         foreach (var rule in rules)
         {
+            if (rule is null)
+                continue;
+
             var word = rule.Word?.Trim() ?? "";
             if (word.Length == 0)
                 continue;

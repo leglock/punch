@@ -37,7 +37,7 @@ public class LoadSettingsTests : IDisposable
     [Fact]
     public void LoadSettings_DefaultsWhenFileMissing()
     {
-        Assert.Equal(8, PunchStorage.LoadSettings().TargetHours);
+        Assert.Equal(8m, PunchStorage.LoadSettings().TargetHours);
     }
 
     [Fact]
@@ -45,7 +45,15 @@ public class LoadSettingsTests : IDisposable
     {
         File.WriteAllText(_settingsPath, """{ "targetHours": 6 }""");
 
-        Assert.Equal(6, PunchStorage.LoadSettings().TargetHours);
+        Assert.Equal(6m, PunchStorage.LoadSettings().TargetHours);
+    }
+
+    [Fact]
+    public void LoadSettings_ReadsDecimalTargetHours()
+    {
+        File.WriteAllText(_settingsPath, """{ "targetHours": 4.25 }""");
+
+        Assert.Equal(4.25m, PunchStorage.LoadSettings().TargetHours);
     }
 
     [Fact]
@@ -53,15 +61,31 @@ public class LoadSettingsTests : IDisposable
     {
         File.WriteAllText(_settingsPath, "not json");
 
-        Assert.Equal(8, PunchStorage.LoadSettings().TargetHours);
+        Assert.Equal(8m, PunchStorage.LoadSettings().TargetHours);
     }
 
     [Fact]
-    public void LoadSettings_ClampsTargetHoursToAtLeastOne()
+    public void LoadSettings_FallsBackWhenTargetHoursIsNotPositive()
     {
         File.WriteAllText(_settingsPath, """{ "targetHours": 0 }""");
 
-        Assert.Equal(1, PunchStorage.LoadSettings().TargetHours);
+        Assert.Equal(8m, PunchStorage.LoadSettings().TargetHours);
+    }
+
+    [Fact]
+    public void LoadSettings_FallsBackWhenTargetHoursIsNotQuarterIncrement()
+    {
+        File.WriteAllText(_settingsPath, """{ "targetHours": 4.1 }""");
+
+        Assert.Equal(8m, PunchStorage.LoadSettings().TargetHours);
+    }
+
+    [Fact]
+    public void LoadSettings_AcceptsMinimumQuarterHourTarget()
+    {
+        File.WriteAllText(_settingsPath, """{ "targetHours": 0.25 }""");
+
+        Assert.Equal(0.25m, PunchStorage.LoadSettings().TargetHours);
     }
 
     [Fact]
@@ -71,9 +95,27 @@ public class LoadSettingsTests : IDisposable
             """{ "targetHours": 8, "targetHoursByDay": { "friday": 4, "saturday": 0 } }""");
 
         var settings = PunchStorage.LoadSettings();
-        Assert.Equal(4, settings.GetTargetHours(DayOfWeek.Friday));
-        Assert.Equal(0, settings.GetTargetHours(DayOfWeek.Saturday));
-        Assert.Equal(8, settings.GetTargetHours(DayOfWeek.Monday));
+        Assert.Equal(4m, settings.GetTargetHours(DayOfWeek.Friday));
+        Assert.Equal(0m, settings.GetTargetHours(DayOfWeek.Saturday));
+        Assert.Equal(8m, settings.GetTargetHours(DayOfWeek.Monday));
+    }
+
+    [Fact]
+    public void GetTargetHours_UsesDecimalPerDayOverride()
+    {
+        File.WriteAllText(_settingsPath,
+            """{ "targetHours": 8, "targetHoursByDay": { "friday": 6.75 } }""");
+
+        Assert.Equal(6.75m, PunchStorage.LoadSettings().GetTargetHours(DayOfWeek.Friday));
+    }
+
+    [Fact]
+    public void GetTargetHours_FallsBackWhenPerDayValueIsNotQuarterIncrement()
+    {
+        File.WriteAllText(_settingsPath,
+            """{ "targetHours": 8, "targetHoursByDay": { "friday": 6.1 } }""");
+
+        Assert.Equal(8m, PunchStorage.LoadSettings().GetTargetHours(DayOfWeek.Friday));
     }
 
     [Fact]
@@ -82,7 +124,7 @@ public class LoadSettingsTests : IDisposable
         File.WriteAllText(_settingsPath,
             """{ "targetHoursByDay": { "SUNDAY": 2 } }""");
 
-        Assert.Equal(2, PunchStorage.LoadSettings().GetTargetHours(DayOfWeek.Sunday));
+        Assert.Equal(2m, PunchStorage.LoadSettings().GetTargetHours(DayOfWeek.Sunday));
     }
 
     [Fact]
@@ -91,7 +133,7 @@ public class LoadSettingsTests : IDisposable
         File.WriteAllText(_settingsPath,
             """{ "targetHoursByDay": { "sunday": -3 } }""");
 
-        Assert.Equal(0, PunchStorage.LoadSettings().GetTargetHours(DayOfWeek.Sunday));
+        Assert.Equal(0m, PunchStorage.LoadSettings().GetTargetHours(DayOfWeek.Sunday));
     }
 
     [Fact]
@@ -99,6 +141,6 @@ public class LoadSettingsTests : IDisposable
     {
         File.WriteAllText(_settingsPath, """{ "targetHours": 6 }""");
 
-        Assert.Equal(6, PunchStorage.LoadSettings().GetTargetHours(DayOfWeek.Wednesday));
+        Assert.Equal(6m, PunchStorage.LoadSettings().GetTargetHours(DayOfWeek.Wednesday));
     }
 }

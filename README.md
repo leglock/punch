@@ -60,7 +60,7 @@ the entry. Navigating onto an existing entry selects it for editing or deletion.
 | Ctrl+E       | Edit selected entry                 |
 | Ctrl+D       | Delete selected entry               |
 | F3 / Ctrl+T  | Ticket summary                      |
-| F4 / Ctrl+P  | Pick a ticket for selected entry    |
+| F4 / Ctrl+P  | Pick a ticket                       |
 | ?            | Toggle help                         |
 | Ctrl+Q, Q    | Quit                                |
 
@@ -83,6 +83,10 @@ The picker also lists any ticket already used somewhere on the open day but
 missing from `tickets.txt`, shown above the saved ones under a `from the log`
 heading. Those have no title on file, so the description of the entry using
 them stands in.
+
+Open it either on a selected entry — where it assigns the ticket straight away —
+or while typing a new entry, where it fills in the Ticket field and leaves your
+description as you left it.
 
 To change the daily hours goal used for the status-bar percentage, create a
 `~/.punch/settings.json` file. `targetHours` takes a whole number and defaults to

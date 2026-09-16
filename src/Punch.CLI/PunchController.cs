@@ -103,10 +103,12 @@ internal sealed class PunchController
         }
 
         // F4 (or Ctrl+P, for terminals/recorders that can't send F-keys) opens
-        // the ticket picker for the selected block (not while editing).
+        // the ticket picker — for the selected block, or to fill the Ticket
+        // field while composing a new entry. Not while editing: the Ticket
+        // field is already live there and Enter means "save the edit".
         if ((key.Key == ConsoleKey.F4
                 || (key.Key == ConsoleKey.P && key.Modifiers.HasFlag(ConsoleModifiers.Control)))
-            && _session.SelectedBlock != null && !_session.Editing)
+            && !_session.Editing)
         {
             _session.Tickets = TicketCatalog.Build(PunchStorage.LoadTickets(), Schedule.Blocks);
             _session.TicketPickerCursor = 0;
@@ -388,14 +390,27 @@ internal sealed class PunchController
 
     private void ApplyTicketPick()
     {
-        // Write only the picked ticket onto the selected block; the label is left
-        // untouched. The block keeps its slots, so Replace re-derives occupancy.
-        if (_session.SelectedBlock != null && _session.Tickets.Count > 0)
+        if (_session.Tickets.Count > 0)
         {
             var picked = _session.Tickets[_session.TicketPickerCursor];
-            var updated = _session.SelectedBlock with { Ticket = picked.Ticket };
-            _session.SelectedBlock = Schedule.Replace(_session.SelectedBlock, updated);
-            Save();
+            if (_session.SelectedBlock != null)
+            {
+                // Write only the picked ticket onto the selected block; the label
+                // is left untouched. The block keeps its slots, so Replace
+                // re-derives occupancy.
+                var updated = _session.SelectedBlock with { Ticket = picked.Ticket };
+                _session.SelectedBlock = Schedule.Replace(_session.SelectedBlock, updated);
+                Save();
+            }
+            else
+            {
+                // Composing a new entry: fill the Ticket field and leave both the
+                // description and the focused field alone, so typing carries on
+                // where it left off. Nothing is persisted until Enter books it.
+                _session.TicketBuffer.Clear();
+                _session.TicketBuffer.Append(picked.Ticket);
+                _session.TicketCursor = _session.TicketBuffer.Length;
+            }
         }
         _session.ShowTicketPicker = false;
     }

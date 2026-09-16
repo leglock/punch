@@ -51,7 +51,7 @@ The TUI has three modes driven by `PunchSession` state, handled in `PunchControl
 3. **Editing** (`selectedBlock != null, editing`) — input buffer is pre-filled with the block's label and ticket; Enter saves the edit (description must be non-empty).
 
 Two modal overlays layer over these modes (state on `PunchSession`):
-- **Ticket picker** (`ShowTicketPicker`, F4 or Ctrl+P) — opens for the selected block when not editing; rebuilds `Tickets` on open via `TicketCatalog.Build` (fresh `tickets.txt` read + the day's own tickets), arrows move `TicketPickerCursor`, Enter assigns the ticket to the block, Esc/F4/Ctrl+P cancel. All other keys are swallowed while open.
+- **Ticket picker** (`ShowTicketPicker`, F4 or Ctrl+P) — opens for the selected block, or while composing a new entry; not while editing (the Ticket field is already live there and Enter means "save the edit"). Rebuilds `Tickets` on open via `TicketCatalog.Build` (fresh `tickets.txt` read + the day's own tickets), arrows move `TicketPickerCursor`, Esc/F4/Ctrl+P cancel. All other keys are swallowed while open. Enter (`ApplyTicketPick`) branches on `SelectedBlock`: with a block it writes the ticket onto it via `Schedule.Replace` and saves; while composing it fills `TicketBuffer` instead, leaving `InputBuffer` and `ActiveField` untouched so typing resumes — nothing is persisted until Enter books the entry.
 - **Ticket summary** (`ShowTicketSummary`, F3 or Ctrl+T) — right-panel view summing hours per ticket with Billable/Unbillable subtotals (split on `TimeBlock.IsUnpaid`); F3/Ctrl+T/Esc closes.
 
 The Ctrl+P/Ctrl+T aliases mirror F4/F3 so terminal recorders (VHS, used by `scripts/record-demo.sh` to refresh the README GIF) that can't send function keys can still drive the picker and summary.

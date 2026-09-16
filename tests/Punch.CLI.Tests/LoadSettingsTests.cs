@@ -143,4 +143,92 @@ public class LoadSettingsTests : IDisposable
 
         Assert.Equal(6m, PunchStorage.LoadSettings().GetTargetHours(DayOfWeek.Wednesday));
     }
+
+    [Fact]
+    public void NonBillable_DefaultsToLunchAndBreakWhenKeyMissing()
+    {
+        File.WriteAllText(_settingsPath, """{ "targetHours": 8 }""");
+
+        var matcher = PunchStorage.LoadSettings().CreateNonBillableMatcher();
+        Assert.True(matcher.IsNonBillable("team lunch"));
+        Assert.True(matcher.IsNonBillable("coffee break"));
+        Assert.False(matcher.IsNonBillable("breakfast"));
+    }
+
+    [Fact]
+    public void NonBillable_ReadsCustomRules()
+    {
+        File.WriteAllText(_settingsPath,
+            """{ "nonBillable": [ { "word": "standup" }, { "word": "afk", "match": "exact" } ] }""");
+
+        var matcher = PunchStorage.LoadSettings().CreateNonBillableMatcher();
+        Assert.True(matcher.IsNonBillable("daily standup"));
+        Assert.True(matcher.IsNonBillable("AFK"));
+        Assert.False(matcher.IsNonBillable("afk meeting"));
+        Assert.False(matcher.IsNonBillable("lunch"));
+    }
+
+    [Fact]
+    public void NonBillable_EmptyListDisablesExclusion()
+    {
+        File.WriteAllText(_settingsPath, """{ "nonBillable": [] }""");
+
+        var matcher = PunchStorage.LoadSettings().CreateNonBillableMatcher();
+        Assert.False(matcher.IsNonBillable("lunch"));
+        Assert.False(matcher.IsNonBillable("break"));
+    }
+
+    [Fact]
+    public void NonBillable_SkipsInvalidRules()
+    {
+        File.WriteAllText(_settingsPath,
+            """{ "nonBillable": [ { "word": "lunch", "match": "substring" }, { "word": "  " }, { "word": "break" } ] }""");
+
+        var matcher = PunchStorage.LoadSettings().CreateNonBillableMatcher();
+        Assert.True(matcher.IsNonBillable("coffee break"));
+        Assert.False(matcher.IsNonBillable("lunch"));
+    }
+
+    [Fact]
+    public void NonBillable_SkipsNullEntries()
+    {
+        File.WriteAllText(_settingsPath,
+            """{ "nonBillable": [ null, { "word": "break" } ] }""");
+
+        var matcher = PunchStorage.LoadSettings().CreateNonBillableMatcher();
+        Assert.True(matcher.IsNonBillable("coffee break"));
+        Assert.False(matcher.IsNonBillable("lunch"));
+    }
+
+    [Fact]
+    public void NonBillable_ExplicitNullKeyFallsBackToDefaults()
+    {
+        File.WriteAllText(_settingsPath, """{ "nonBillable": null }""");
+
+        var matcher = PunchStorage.LoadSettings().CreateNonBillableMatcher();
+        Assert.True(matcher.IsNonBillable("team lunch"));
+        Assert.True(matcher.IsNonBillable("coffee break"));
+        Assert.False(matcher.IsNonBillable("breakfast"));
+    }
+
+    [Fact]
+    public void NonBillable_SkipsRulesWithMissingWordOrNullMatch()
+    {
+        File.WriteAllText(_settingsPath,
+            """{ "nonBillable": [ { "match": "word" }, { "word": "lunch", "match": null }, { "word": null }, { "word": "break" } ] }""");
+
+        var matcher = PunchStorage.LoadSettings().CreateNonBillableMatcher();
+        Assert.True(matcher.IsNonBillable("coffee break"));
+        Assert.False(matcher.IsNonBillable("lunch"));
+    }
+
+    [Fact]
+    public void NonBillable_DefaultsWhenFileIsGarbage()
+    {
+        File.WriteAllText(_settingsPath, "not json");
+
+        var matcher = PunchStorage.LoadSettings().CreateNonBillableMatcher();
+        Assert.True(matcher.IsNonBillable("lunch"));
+        Assert.False(matcher.IsNonBillable("breakfast"));
+    }
 }

@@ -18,7 +18,7 @@ A TUI time tracker for your workday. Log, label, and export your hours without l
 - Label each entry with a description and an optional ticket number
 - Pick a ticket from a list (F4) maintained in `~/.punch/tickets.txt`, plus any ticket already used that day
 - Edit and resize existing entries in place
-- Running workday total in the status bar, with lunch and break blocks excluded
+- Running workday total in the status bar, with non-billable blocks (lunch and breaks by default, configurable) excluded
 - Ticket summary view (F3) totalling time per ticket, with billable/unbillable subtotals
 - Scrollable time log for busy days
 - One JSON file per day, stored under `~/.punch/data/`
@@ -98,6 +98,14 @@ shows the total without a percentage. Values that aren't 15-minute increments
 are invalid: a per-day value falls back to `targetHours`, and an invalid
 `targetHours` falls back to the default 8.
 
+The optional `nonBillable` list controls which entries are excluded from the
+workday total (and shown under Unbillable in the F3 summary). Each rule has a
+`word` and an optional `match` mode: `"word"` (the default) matches the word
+anywhere in the label as a whole word — `"break"` matches "coffee break" but
+not "breakfast" — while `"exact"` requires the entire label to equal the word.
+Both modes are case-insensitive. When the key is absent, the defaults below
+apply; an empty list `[]` disables the exclusion entirely.
+
 ```json
 {
   "targetHours": 8,
@@ -105,7 +113,11 @@ are invalid: a per-day value falls back to `targetHours`, and an invalid
     "friday": 6.5,
     "saturday": 0,
     "sunday": 0
-  }
+  },
+  "nonBillable": [
+    { "word": "lunch", "match": "word" },
+    { "word": "break", "match": "word" }
+  ]
 }
 ```
 

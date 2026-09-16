@@ -20,6 +20,13 @@ internal sealed class PunchSettings
     // valid; anything else falls back.
     internal static bool IsQuarterIncrement(decimal value) => value % 0.25m == 0m;
 
+    // Optional rules marking blocks as non-billable by label. Null (key absent)
+    // falls back to the defaults (whole-word "lunch"/"break"); an empty list
+    // means nothing is non-billable.
+    public List<NonBillableRule>? NonBillable { get; set; }
+
+    public NonBillableMatcher CreateNonBillableMatcher() => NonBillableMatcher.Create(NonBillable);
+
     // Resolves the target for a given weekday: the per-day override if one is
     // present (clamped to >= 0), otherwise the flat TargetHours. A per-day value
     // that isn't a 15-minute increment is invalid and falls back to TargetHours.

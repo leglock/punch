@@ -201,6 +201,28 @@ public class LoadSettingsTests : IDisposable
     }
 
     [Fact]
+    public void NonBillable_ExplicitNullKeyFallsBackToDefaults()
+    {
+        File.WriteAllText(_settingsPath, """{ "nonBillable": null }""");
+
+        var matcher = PunchStorage.LoadSettings().CreateNonBillableMatcher();
+        Assert.True(matcher.IsNonBillable("team lunch"));
+        Assert.True(matcher.IsNonBillable("coffee break"));
+        Assert.False(matcher.IsNonBillable("breakfast"));
+    }
+
+    [Fact]
+    public void NonBillable_SkipsRulesWithMissingWordOrNullMatch()
+    {
+        File.WriteAllText(_settingsPath,
+            """{ "nonBillable": [ { "match": "word" }, { "word": "lunch", "match": null }, { "word": null }, { "word": "break" } ] }""");
+
+        var matcher = PunchStorage.LoadSettings().CreateNonBillableMatcher();
+        Assert.True(matcher.IsNonBillable("coffee break"));
+        Assert.False(matcher.IsNonBillable("lunch"));
+    }
+
+    [Fact]
     public void NonBillable_DefaultsWhenFileIsGarbage()
     {
         File.WriteAllText(_settingsPath, "not json");

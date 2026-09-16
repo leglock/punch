@@ -777,13 +777,77 @@ public class PunchControllerTests : IDisposable
     }
 
     [Fact]
-    public void F4_WithoutSelection_DoesNotOpenPicker()
+    public void F4_WithoutSelection_OpensPickerForTheTicketField()
     {
+        SeedTickets();
         var (controller, session) = Create();
 
         controller.HandleKey(Key(ConsoleKey.F4));
 
+        Assert.True(session.ShowTicketPicker);
+        Assert.Null(session.SelectedBlock);
+    }
+
+    [Fact]
+    public void PickerEnter_WhileComposing_FillsTheTicketFieldOnly()
+    {
+        SeedTickets();
+        var (controller, session) = Create();
+        Type(controller, "morning standup");
+        controller.HandleKey(Key(ConsoleKey.F4));
+        controller.HandleKey(Key(ConsoleKey.DownArrow));
+
+        controller.HandleKey(Key(ConsoleKey.Enter));
+
+        Assert.Equal("DEF-2", session.TicketBuffer.ToString());
+        Assert.Equal("DEF-2".Length, session.TicketCursor);
+        // The description and the focused field are left alone so typing resumes.
+        Assert.Equal("morning standup", session.InputBuffer.ToString());
+        Assert.Equal(0, session.ActiveField);
         Assert.False(session.ShowTicketPicker);
+    }
+
+    [Fact]
+    public void PickerEnter_WhileComposing_BooksNothingUntilEnter()
+    {
+        SeedTickets();
+        var (controller, session) = Create();
+        Type(controller, "morning standup");
+        controller.HandleKey(Key(ConsoleKey.F4));
+
+        controller.HandleKey(Key(ConsoleKey.Enter));
+
+        Assert.Empty(session.Blocks);
+        Assert.False(File.Exists(PunchStorage.GetFilePath(Date)));
+    }
+
+    [Fact]
+    public void PickedTicket_WhileComposing_IsBookedWithTheEntry()
+    {
+        SeedTickets();
+        var (controller, session) = Create(cursorSlot: 20);
+        Type(controller, "morning standup");
+        controller.HandleKey(Key(ConsoleKey.F4));
+        controller.HandleKey(Key(ConsoleKey.Enter));
+
+        controller.HandleKey(Key(ConsoleKey.Enter));
+
+        Assert.Equal(new TimeBlock(20, 1, "morning standup", "ABC-1"), Assert.Single(session.Blocks));
+    }
+
+    [Fact]
+    public void PickerCancel_WhileComposing_LeavesTheTicketFieldAlone()
+    {
+        SeedTickets();
+        var (controller, session) = Create();
+        Type(controller, "morning standup");
+        controller.HandleKey(Key(ConsoleKey.F4));
+
+        controller.HandleKey(Key(ConsoleKey.Escape));
+
+        Assert.False(session.ShowTicketPicker);
+        Assert.Equal("", session.TicketBuffer.ToString());
+        Assert.Equal("morning standup", session.InputBuffer.ToString());
     }
 
     [Fact]

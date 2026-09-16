@@ -16,7 +16,7 @@ A TUI time tracker for your workday. Log, label, and export your hours without l
 - Full-screen terminal UI built with .NET 10 and Spectre.Console
 - Day timeline split into 96 quarter-hour slots — select a range and book it
 - Label each entry with a description and an optional ticket number
-- Pick a ticket from a list (F4) maintained in `~/.punch/tickets.txt`
+- Pick a ticket from a list (F4) maintained in `~/.punch/tickets.txt`, plus any ticket already used that day
 - Edit and resize existing entries in place
 - Running workday total in the status bar, with non-billable blocks (lunch and breaks by default, configurable) excluded
 - Ticket summary view (F3) totalling time per ticket, with billable/unbillable subtotals
@@ -60,7 +60,7 @@ the entry. Navigating onto an existing entry selects it for editing or deletion.
 | Ctrl+E       | Edit selected entry                 |
 | Ctrl+D       | Delete selected entry               |
 | F3 / Ctrl+T  | Ticket summary                      |
-| F4 / Ctrl+P  | Pick a ticket for selected entry    |
+| F4 / Ctrl+P  | Pick a ticket                       |
 | ?            | Toggle help                         |
 | Ctrl+Q, Q    | Quit                                |
 
@@ -79,12 +79,24 @@ PROJ-123,Fix login redirect
 PROJ-456,Quarterly report export
 ```
 
+The picker also lists any ticket already used somewhere on the open day but
+missing from `tickets.txt`, shown above the saved ones under a `from the log`
+heading. Those have no title on file, so the description of the entry using
+them stands in.
+
+Open it either on a selected entry — where it assigns the ticket straight away —
+or while typing a new entry, where it fills in the Ticket field and leaves your
+description as you left it.
+
 To change the daily hours goal used for the status-bar percentage, create a
-`~/.punch/settings.json` file. `targetHours` takes a whole number and defaults to
-8 when the file is absent. The optional `targetHoursByDay` object overrides the
-goal for specific weekdays (case-insensitive day names); days not listed fall
-back to `targetHours`. Set a day to `0` to mark it as a day off — the status
-bar then shows the total without a percentage.
+`~/.punch/settings.json` file. `targetHours` takes a number of hours in
+15-minute increments (`4`, `4.25`, `6.5`, `7.75`, …) and defaults to 8 when the
+file is absent. The optional `targetHoursByDay` object overrides the goal for
+specific weekdays (case-insensitive day names); days not listed fall back to
+`targetHours`. Set a day to `0` to mark it as a day off — the status bar then
+shows the total without a percentage. Values that aren't 15-minute increments
+are invalid: a per-day value falls back to `targetHours`, and an invalid
+`targetHours` falls back to the default 8.
 
 The optional `nonBillable` list controls which entries are excluded from the
 workday total (and shown under Unbillable in the F3 summary). Each rule has a
@@ -98,7 +110,7 @@ apply; an empty list `[]` disables the exclusion entirely.
 {
   "targetHours": 8,
   "targetHoursByDay": {
-    "friday": 6,
+    "friday": 6.5,
     "saturday": 0,
     "sunday": 0
   },

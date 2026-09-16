@@ -7,7 +7,7 @@ namespace Punch.CLI;
 // The event loop mutates these in place and the renderer reads them.
 internal sealed class PunchSession
 {
-    public PunchSession(DaySchedule schedule, DateOnly workingDate, string filePath, int cursorSlot, int targetHours = 8, NonBillableMatcher? nonBillable = null)
+    public PunchSession(DaySchedule schedule, DateOnly workingDate, string filePath, int cursorSlot, decimal targetHours = 8, NonBillableMatcher? nonBillable = null)
     {
         Schedule = schedule;
         WorkingDate = workingDate;
@@ -21,8 +21,9 @@ internal sealed class PunchSession
     public DateOnly WorkingDate { get; }
     public string FilePath { get; }
 
-    // The daily workday goal in whole hours, used for the status-bar percentage.
-    public int TargetHours { get; }
+    // The daily workday goal in hours (15-minute increments), used for the
+    // status-bar percentage.
+    public decimal TargetHours { get; }
 
     // The user's configured non-billable label rules, used to exclude blocks
     // (lunch, breaks, ...) from the workday total.
@@ -50,8 +51,10 @@ internal sealed class PunchSession
     public bool ShowTicketSummary { get; set; }
     public int LogScrollOffset { get; set; }
 
-    // Ticket picker overlay. Tickets is reloaded from disk each time the picker
-    // is opened, so edits to ~/.punch/tickets.txt are picked up without a restart.
+    // Ticket picker overlay. Tickets is rebuilt each time the picker is opened
+    // (TicketCatalog.Build over a fresh ~/.punch/tickets.txt read plus the day's
+    // own blocks), so edits to the file are picked up without a restart. The
+    // list is flat and fully selectable; group headers are a view concern.
     public bool ShowTicketPicker { get; set; }
     public int TicketPickerCursor { get; set; }
     public List<TicketEntry> Tickets { get; set; } = new();

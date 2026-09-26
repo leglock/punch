@@ -20,9 +20,17 @@ internal static class PunchStorage
 
     public static string GetDisplayPath(DateOnly date)
     {
-        var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        var home = Path.TrimEndingDirectorySeparator(
+            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile));
         var full = GetFilePath(date);
-        return full.StartsWith(home) ? "~" + full[home.Length..] : full;
+        // Require a separator after home so a sibling like "/home/pat2" isn't
+        // treated as inside "/home/pat"; Windows paths compare case-insensitively.
+        var comparison = OperatingSystem.IsWindows()
+            ? StringComparison.OrdinalIgnoreCase
+            : StringComparison.Ordinal;
+        return full.StartsWith(home + Path.DirectorySeparatorChar, comparison)
+            ? "~" + full[home.Length..]
+            : full;
     }
 
     // The manually-maintained tickets list sits alongside the data dir, e.g.

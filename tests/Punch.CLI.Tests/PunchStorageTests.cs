@@ -165,10 +165,29 @@ public class PunchStorageTests : IDisposable
     [Fact]
     public void GetDisplayPath_ReturnsAbsolutePathWhenOutsideHome()
     {
-        // _tempDir lives under the system temp dir, which is not under the user's home on Linux.
+        // Don't use _tempDir: on Windows the temp dir lives under the user's home.
+        // GetDisplayPath is pure string work, so the directory needn't exist.
+        var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        var outside = Path.Combine(Path.GetPathRoot(home)!, "punch-outside-home", "data");
+        PunchStorage.DataDirectoryOverride = outside;
+
         var display = PunchStorage.GetDisplayPath(new DateOnly(2026, 5, 4));
 
-        Assert.StartsWith(_tempDir, display);
+        Assert.StartsWith(outside, display);
+        Assert.DoesNotContain("~", display);
+    }
+
+    [Fact]
+    public void GetDisplayPath_DoesNotSubstituteTildeForSiblingOfHome()
+    {
+        var home = Path.TrimEndingDirectorySeparator(
+            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile));
+        var sibling = Path.Combine(home + "-sibling", "data");
+        PunchStorage.DataDirectoryOverride = sibling;
+
+        var display = PunchStorage.GetDisplayPath(new DateOnly(2026, 5, 4));
+
+        Assert.StartsWith(sibling, display);
         Assert.DoesNotContain("~", display);
     }
 

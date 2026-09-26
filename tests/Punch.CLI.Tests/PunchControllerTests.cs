@@ -1035,4 +1035,52 @@ public class PunchControllerTests : IDisposable
 
         Assert.Equal(4, session.LogScrollOffset);
     }
+
+    [Fact]
+    public void F5_CyclesThemeAndWrapsAround()
+    {
+        var (controller, session) = Create();
+        Assert.Equal("ember", session.Theme.Name);
+
+        controller.HandleKey(Key(ConsoleKey.F5));
+        Assert.Equal("meadow", session.Theme.Name);
+
+        for (var i = 0; i < 3; i++)
+            controller.HandleKey(Key(ConsoleKey.F5));
+        Assert.Equal("ember", session.Theme.Name);
+    }
+
+    [Fact]
+    public void CtrlR_CyclesThemeAndPersistsItToState()
+    {
+        var (controller, session) = Create();
+
+        controller.HandleKey(Key(ConsoleKey.R, '\x12', ctrl: true));
+
+        Assert.Equal("meadow", session.Theme.Name);
+        Assert.Equal("meadow", PunchStorage.LoadState().Theme);
+    }
+
+    [Fact]
+    public void F5_CyclesThemeWithoutDismissingHelp()
+    {
+        var (controller, session) = Create();
+        session.ShowHelp = true;
+
+        controller.HandleKey(Key(ConsoleKey.F5));
+
+        Assert.True(session.ShowHelp);
+        Assert.Equal("meadow", session.Theme.Name);
+    }
+
+    [Fact]
+    public void F5_DoesNotTypeIntoInput()
+    {
+        var (controller, session) = Create();
+        Type(controller, "abc");
+
+        controller.HandleKey(Key(ConsoleKey.F5));
+
+        Assert.Equal("abc", session.InputBuffer.ToString());
+    }
 }

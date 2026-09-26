@@ -7,7 +7,8 @@ namespace Punch.CLI;
 // The event loop mutates these in place and the renderer reads them.
 internal sealed class PunchSession
 {
-    public PunchSession(DaySchedule schedule, DateOnly workingDate, string filePath, int cursorSlot, decimal targetHours = 8, NonBillableMatcher? nonBillable = null)
+    public PunchSession(DaySchedule schedule, DateOnly workingDate, string filePath, int cursorSlot, decimal targetHours = 8, NonBillableMatcher? nonBillable = null,
+        IReadOnlyList<Theme>? themes = null, int themeIndex = 0)
     {
         Schedule = schedule;
         WorkingDate = workingDate;
@@ -15,6 +16,8 @@ internal sealed class PunchSession
         CursorSlot = cursorSlot;
         TargetHours = targetHours;
         NonBillable = nonBillable ?? NonBillableMatcher.Default;
+        Themes = themes is { Count: > 0 } ? themes : ThemeCatalog.BuiltIn;
+        ThemeIndex = Math.Clamp(themeIndex, 0, Themes.Count - 1);
     }
 
     public DaySchedule Schedule { get; }
@@ -32,6 +35,14 @@ internal sealed class PunchSession
     public bool IsNonBillable(TimeBlock block) => NonBillable.IsNonBillable(block.Label);
 
     public IReadOnlyList<TimeBlock> Blocks => Schedule.Blocks;
+
+    // The available color themes and the active one, cycled with F5/Ctrl+R.
+    public IReadOnlyList<Theme> Themes { get; }
+    public int ThemeIndex { get; private set; }
+    public Theme Theme => Themes[ThemeIndex];
+
+    // Advances to the next theme, wrapping around after the last.
+    public void CycleTheme() => ThemeIndex = (ThemeIndex + 1) % Themes.Count;
 
     // Input fields. ActiveField: 0 = Description, 1 = Ticket.
     public StringBuilder InputBuffer { get; } = new();

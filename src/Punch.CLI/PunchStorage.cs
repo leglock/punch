@@ -95,6 +95,56 @@ internal static class PunchStorage
         }
     }
 
+    // The app-owned state file sits alongside the data dir, e.g.
+    // ~/.punch/state.json (parent of ~/.punch/data).
+    public static string GetStateFilePath()
+    {
+        var dataDir = GetDataDirectory();
+        var baseDir = Directory.GetParent(dataDir)?.FullName ?? dataDir;
+        return Path.Combine(baseDir, "state.json");
+    }
+
+    // Loads UI state from state.json. Returns an empty state if the file is
+    // missing or cannot be parsed.
+    public static PunchState LoadState()
+    {
+        var path = GetStateFilePath();
+        if (!File.Exists(path))
+            return new PunchState();
+
+        try
+        {
+            return JsonSerializer.Deserialize<PunchState>(File.ReadAllText(path),
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new PunchState();
+        }
+        catch (JsonException)
+        {
+            return new PunchState();
+        }
+    }
+
+    // Saves UI state to state.json. Best-effort: the state is a convenience, so
+    // a failed write is ignored rather than interrupting the session.
+    public static void SaveState(PunchState state)
+    {
+        var path = GetStateFilePath();
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            var json = JsonSerializer.Serialize(state, new JsonSerializerOptions
+            {
+                WriteIndented = true,
+                PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+            });
+            var tmpPath = path + ".tmp";
+            File.WriteAllText(tmpPath, json);
+            File.Move(tmpPath, path, overwrite: true);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+        }
+    }
+
     public static List<TimeBlock> Load(DateOnly date)
     {
         var path = GetFilePath(date);

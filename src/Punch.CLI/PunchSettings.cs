@@ -27,6 +27,13 @@ internal sealed class PunchSettings
 
     public NonBillableMatcher CreateNonBillableMatcher() => NonBillableMatcher.Create(NonBillable);
 
+    // Optional user color themes keyed by name. Each is merged over the
+    // built-ins (see ThemeCatalog.Build); the active one is chosen in-app with
+    // F5/Ctrl+R and remembered in state.json.
+    public Dictionary<string, ThemeColors?>? Themes { get; set; }
+
+    public IReadOnlyList<Theme> CreateThemes() => ThemeCatalog.Build(Themes);
+
     // Resolves the target for a given weekday: the per-day override if one is
     // present (clamped to >= 0), otherwise the flat TargetHours. A per-day value
     // that isn't a 15-minute increment is invalid and falls back to TargetHours.

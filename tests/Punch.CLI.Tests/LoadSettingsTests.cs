@@ -231,4 +231,59 @@ public class LoadSettingsTests : IDisposable
         Assert.True(matcher.IsNonBillable("lunch"));
         Assert.False(matcher.IsNonBillable("breakfast"));
     }
+
+    [Fact]
+    public void Themes_BuiltInsWhenKeyAbsent()
+    {
+        File.WriteAllText(_settingsPath, """{ "targetHours": 8 }""");
+
+        Assert.Equal(ThemeCatalog.BuiltIn, PunchStorage.LoadSettings().CreateThemes());
+    }
+
+    [Fact]
+    public void Themes_ReadsUserThemes()
+    {
+        File.WriteAllText(_settingsPath, """
+            {
+              "themes": {
+                "dusk": {
+                  "blockPrimary": "#5f00af",
+                  "statusBarBackground": "rgb(0,0,95)",
+                  "logo": ["#ffffff"]
+                }
+              }
+            }
+            """);
+
+        var themes = PunchStorage.LoadSettings().CreateThemes();
+        var dusk = themes[^1];
+        Assert.Equal("dusk", dusk.Name);
+        Assert.Equal("#5F00AF", dusk.BlockPrimary);
+        Assert.Equal("#00005F", dusk.StatusBarBackground);
+        Assert.Equal("#FFFFFF", dusk.Logo[4]);
+    }
+
+    [Fact]
+    public void State_EmptyWhenFileMissing()
+    {
+        Assert.Null(PunchStorage.LoadState().Theme);
+    }
+
+    [Fact]
+    public void State_EmptyWhenFileIsGarbage()
+    {
+        File.WriteAllText(PunchStorage.GetStateFilePath(), "not json");
+
+        Assert.Null(PunchStorage.LoadState().Theme);
+    }
+
+    [Fact]
+    public void State_RoundTripsThemeBesideDataDir()
+    {
+        PunchStorage.SaveState(new PunchState { Theme = "glacier" });
+
+        Assert.Equal(Path.Combine(_tempDir, "state.json"), PunchStorage.GetStateFilePath());
+        Assert.Contains("\"theme\"", File.ReadAllText(PunchStorage.GetStateFilePath()));
+        Assert.Equal("glacier", PunchStorage.LoadState().Theme);
+    }
 }

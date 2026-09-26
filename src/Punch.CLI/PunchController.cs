@@ -67,6 +67,16 @@ internal sealed class PunchController
             return false;
         }
 
+        // F5 (or Ctrl+R, for terminals/recorders that can't send F-keys) cycles
+        // the color theme. Purely visual, so it works over any overlay (help
+        // stays open to show the new theme's name).
+        if (key.Key == ConsoleKey.F5
+            || (key.Key == ConsoleKey.R && key.Modifiers.HasFlag(ConsoleModifiers.Control)))
+        {
+            HandleCycleTheme();
+            return false;
+        }
+
         // Any key dismisses help.
         if (_session.ShowHelp)
         {
@@ -413,6 +423,14 @@ internal sealed class PunchController
             }
         }
         _session.ShowTicketPicker = false;
+    }
+
+    private void HandleCycleTheme()
+    {
+        _session.CycleTheme();
+        var state = PunchStorage.LoadState();
+        state.Theme = _session.Theme.Name;
+        PunchStorage.SaveState(state);
     }
 
     private void HandleTextInput(ConsoleKeyInfo key)

@@ -21,6 +21,7 @@ A TUI time tracker for your workday. Log, label, and export your hours without l
 - Running workday total in the status bar, with non-billable blocks (lunch and breaks by default, configurable) excluded
 - Ticket summary view (F3) totalling time per ticket, with billable/unbillable subtotals
 - Scrollable time log for busy days
+- Color themes (F5) — four built in, plus your own in `settings.json`
 - One JSON file per day, stored under `~/.punch/data/`
 
 ## Install
@@ -61,6 +62,7 @@ the entry. Navigating onto an existing entry selects it for editing or deletion.
 | Ctrl+D       | Delete selected entry               |
 | F3 / Ctrl+T  | Ticket summary                      |
 | F4 / Ctrl+P  | Pick a ticket                       |
+| F5 / Ctrl+R  | Cycle color theme                   |
 | ?            | Toggle help                         |
 | Ctrl+Q, Q    | Quit                                |
 
@@ -120,6 +122,57 @@ apply; an empty list `[]` disables the exclusion entirely.
   ]
 }
 ```
+
+### Color themes
+
+Press **F5** (or **Ctrl+R**) to cycle through the color themes. Punch remembers
+your choice in `~/.punch/state.json` for the next run. Four themes are built in:
+`ember` (the original orange, and the default), `meadow` (light green),
+`glacier` (light blue), and `blossom` (light red).
+
+To add your own, give it a name under `themes` in `settings.json`. Colors may be
+hex (`"#87d787"`), `"rgb(135,215,135)"`, or a
+[Spectre color name](https://spectreconsole.net/appendix/colors) (`"orangered1"`).
+Every key is optional — anything left out or unparseable comes from `ember`.
+A theme named like a built-in replaces it and inherits the rest of that
+built-in's colors, so you can tweak just one color.
+
+```json
+{
+  "themes": {
+    "dusk": {
+      "blockPrimary": "#af87ff",
+      "blockAlternate": "#8787d7",
+      "blockNonBillable": "#808080",
+      "selection": "#ffff5f",
+      "selectionBlock": "#ffffff",
+      "nowMarker": "#af87ff",
+      "ticket": "#5fd7ff",
+      "highlight": "#ffff5f",
+      "statusBarBackground": "#5f5f87",
+      "statusBarText": "#ffffff",
+      "statusBarAccent": "#ffff5f",
+      "gaugeFilled": "#ffff5f",
+      "logo": ["#5f5fff", "#8787ff", "#af87ff", "#d787ff", "#ffafff"]
+    }
+  }
+}
+```
+
+| Key | Colors |
+|---|---|
+| `blockPrimary` / `blockAlternate` | Booked blocks (alternating so neighbors stand apart) |
+| `blockNonBillable` | Non-billable blocks and the Unbillable summary row |
+| `selection` | The free selection on the timeline |
+| `selectionBlock` | A selected existing entry |
+| `nowMarker` | The ▲ current-time marker |
+| `ticket` | Ticket IDs |
+| `highlight` | The picker cursor and "press again" prompts |
+| `statusBarBackground` / `statusBarText` / `statusBarAccent` | The bottom status bar and its key hints |
+| `gaugeFilled` | The filled part of the status-bar progress gauge (drawn on the status bar background) |
+| `logo` | The letters of "punch" in the help panel (repeats if fewer than five) |
+
+Secondary text (hints, durations, the empty timeline track) is always grey.
 
 ## Development
 

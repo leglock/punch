@@ -10,6 +10,10 @@ namespace Punch.CLI;
 // presentation: it reads session state and never mutates it.
 internal sealed class PunchView
 {
+    // Secondary text (hints, durations, the empty track, inactive fields). A
+    // fixed grey shared by every theme rather than a theme color.
+    private const string Muted = "grey";
+
     private readonly Layout _layout;
 
     public PunchView(Layout layout)
@@ -30,6 +34,7 @@ internal sealed class PunchView
         var cursorSlot = session.CursorSlot;
         var selectionLength = session.SelectionLength;
         var selectedBlock = session.SelectedBlock;
+        var theme = session.Theme;
 
         var consoleWidth = System.Console.WindowWidth;
         var barWidth = Math.Max(1, consoleWidth - 4); // account for panel border + padding
@@ -68,7 +73,7 @@ internal sealed class PunchView
         if (selEndExcl == selStartPos) selEndExcl = selStartPos + 1;
         selStartPos = Math.Clamp(selStartPos, 0, totalBarWidth - 1);
         var selEndPos = Math.Clamp(selEndExcl - 1, selStartPos, totalBarWidth - 1);
-        // State 3 = selected existing block (cyan), State 2 = free selection (yellow)
+        // State 3 = selected existing block, State 2 = free selection
         var selPixelState = selectedBlock != null ? 3 : 2;
         for (var i = selStartPos; i <= selEndPos; i++)
             pixelState[i] = selPixelState;
@@ -137,11 +142,11 @@ internal sealed class PunchView
                 barMarkup.Append(currentState switch
                 {
                     1 => currentBlockIndex >= 0 && currentBlockIndex < sorted.Count && session.IsNonBillable(sorted[currentBlockIndex])
-                            ? "[grey50]"
-                            : currentBlockIndex % 2 == 0 ? "[orangered1]" : "[orange3]",
-                    2 => "[bold yellow]",
-                    3 => "[bold white]",
-                    _ => "[dim]"
+                            ? $"[{theme.BlockNonBillable}]"
+                            : currentBlockIndex % 2 == 0 ? $"[{theme.BlockPrimary}]" : $"[{theme.BlockAlternate}]",
+                    2 => $"[bold {theme.Selection}]",
+                    3 => $"[bold {theme.SelectionBlock}]",
+                    _ => $"[{Muted}]"
                 });
             }
             barMarkup.Append(currentState switch
@@ -157,19 +162,19 @@ internal sealed class PunchView
         var pad = Math.Max(0, (barWidth - totalBarWidth) / 2);
         var padStr = new string(' ', pad);
 
-        // Render the labels line, lifting the now marker out of the dim span so
-        // it stands out in the accent color.
+        // Render the labels line, lifting the now marker out of the muted span
+        // so it stands out in the accent color.
         var labelsLine = new string(labelChars);
         string labelsMarkup;
         if (nowMarkerPos >= 0)
         {
             var left = Markup.Escape(padStr + labelsLine[..nowMarkerPos]);
             var right = Markup.Escape(labelsLine[(nowMarkerPos + 1)..]);
-            labelsMarkup = $"[dim]{left}[/][bold orangered1]▲[/][dim]{right}[/]";
+            labelsMarkup = $"[{Muted}]{left}[/][bold {theme.NowMarker}]▲[/][{Muted}]{right}[/]";
         }
         else
         {
-            labelsMarkup = $"[dim]{Markup.Escape(padStr + labelsLine)}[/]";
+            labelsMarkup = $"[{Muted}]{Markup.Escape(padStr + labelsLine)}[/]";
         }
 
         var timelineContent = new Rows(
@@ -192,7 +197,7 @@ internal sealed class PunchView
             _layout["Messages"].Update(new Layout("MessagesSplit")
                 .SplitColumns(
                     new Layout("Log").Update(BuildLogPanel(session)),
-                    new Layout("Help").Update(BuildHelpPanel())));
+                    new Layout("Help").Update(BuildHelpPanel(session.Theme))));
         else if (session.ShowTicketPicker)
             // Split the content area so the time log stays visible on the left
             // while the picker occupies the right half.
@@ -214,6 +219,7 @@ internal sealed class PunchView
     private static IRenderable BuildLogPanel(PunchSession session)
     {
         var selectedBlock = session.SelectedBlock;
+        var theme = session.Theme;
         var sorted = session.Blocks.OrderBy(b => b.StartSlot).ToList();
 
         // Messages pane: show booked blocks sorted chronologically with scrolling
@@ -243,13 +249,13 @@ internal sealed class PunchView
         IRenderable messagesContent;
         if (visibleBlocks.Count == 0)
         {
-            messagesContent = new Markup("[dim]No entries yet. Select a time range and press Enter.[/]");
+            messagesContent = new Markup($"[{Muted}]No entries yet. Select a time range and press Enter.[/]");
         }
         else
         {
             var renderables = new List<IRenderable>();
             if (hasMoreAbove)
-                renderables.Add(new Markup($"[dim]  ▲ {clampedOffset} more above (PgUp)[/]"));
+                renderables.Add(new Markup($"[{Muted}]  ▲ {clampedOffset} more above (PgUp)[/]"));
             foreach (var b in visibleBlocks)
             {
                 var timeRange = SlotTime.FormatRange(b.StartSlot, b.StartSlot + b.Length);
@@ -257,18 +263,18 @@ internal sealed class PunchView
                 var isSelected = selectedBlock != null && b.StartSlot == selectedBlock.StartSlot && b.Length == selectedBlock.Length;
                 var blockIdx = sorted.IndexOf(b);
                 var squareColor = isSelected
-                    ? "white"
+                    ? theme.SelectionBlock
                     : session.IsNonBillable(b)
-                        ? "grey50"
-                        : blockIdx % 2 == 0 ? "orangered1" : "orange3";
+                        ? theme.BlockNonBillable
+                        : blockIdx % 2 == 0 ? theme.BlockPrimary : theme.BlockAlternate;
                 var durationText = Duration.Humanize(b.Length * 15);
-                var ticketDisplay = string.IsNullOrEmpty(b.Ticket) ? "" : $"[cyan]{Markup.Escape(b.Ticket)}[/] ";
-                renderables.Add(new Markup($"[{squareColor}]■[/] [bold]{timeRange}[/] {ticketDisplay}{escaped} [dim grey]{durationText}[/]"));
+                var ticketDisplay = string.IsNullOrEmpty(b.Ticket) ? "" : $"[{theme.Ticket}]{Markup.Escape(b.Ticket)}[/] ";
+                renderables.Add(new Markup($"[{squareColor}]■[/] [bold]{timeRange}[/] {ticketDisplay}{escaped} [{Muted}]{durationText}[/]"));
             }
             if (hasMoreBelow)
             {
                 var belowCount = sorted.Count - clampedOffset - availableLines;
-                renderables.Add(new Markup($"[dim]  ▼ {belowCount} more below (PgDn)[/]"));
+                renderables.Add(new Markup($"[{Muted}]  ▼ {belowCount} more below (PgDn)[/]"));
             }
             messagesContent = new Rows(renderables);
         }
@@ -282,11 +288,12 @@ internal sealed class PunchView
             .Border(BoxBorder.Rounded);
     }
 
-    private static IRenderable BuildHelpPanel()
+    private static IRenderable BuildHelpPanel(Theme theme)
     {
         var version = Assembly.GetExecutingAssembly()
             .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "0.0.0";
-        var titleLine = new Markup($"[bold][red]p[/][orangered1]u[/][darkorange]n[/][orange3]c[/][orange1]h[/][/] [dim]v{Markup.Escape(version)}[/]");
+        var logo = string.Concat("punch".Select((ch, i) => $"[{theme.Logo[i]}]{ch}[/]"));
+        var titleLine = new Markup($"[bold]{logo}[/] [{Muted}]v{Markup.Escape(version)} · theme: {Markup.Escape(theme.Name)}[/]");
         var helpText = new Markup(
             "[bold]Left/Right[/]  Move cursor / Jump between blocks\n" +
             "[bold]Up/Down[/]     Resize selection\n" +
@@ -298,13 +305,14 @@ internal sealed class PunchView
             "[bold]Ctrl+Q, Q[/]   Quit\n" +
             "[bold]?[/]           Toggle this help\n" +
             "[bold]F3, Ctrl+T[/]   Ticket summary\n" +
-            "[bold]F4, Ctrl+P[/]   Pick ticket for entry");
+            "[bold]F4, Ctrl+P[/]   Pick ticket for entry\n" +
+            "[bold]F5, Ctrl+R[/]   Cycle color theme");
         var helpContent = new Rows(
             titleLine,
             new Text(" "),
             helpText,
             new Text(" "),
-            new Markup("[dim]Esc/? cancel[/]"));
+            new Markup($"[{Muted}]Esc/? cancel[/]"));
         // A single Expand-ed panel that fills the region height exactly, matching
         // the log panel beside it.
         return new Panel(helpContent)
@@ -316,6 +324,7 @@ internal sealed class PunchView
     private static IRenderable BuildTicketSummaryPanel(PunchSession session)
     {
         var blocks = session.Blocks;
+        var theme = session.Theme;
         var ticketGroups = blocks
             .GroupBy(b => string.IsNullOrEmpty(b.Ticket) ? "" : b.Ticket)
             .Select(g => new { Ticket = g.Key, TotalMinutes = g.Sum(b => b.Length * 15) })
@@ -329,20 +338,20 @@ internal sealed class PunchView
             var dur = Duration.Humanize(g.TotalMinutes);
             var visibleName = g.Ticket == "" ? "Other" : g.Ticket;
             var paddedName = visibleName.PadRight(20);
-            var ticketLabel = g.Ticket == "" ? $"[dim]{paddedName}[/]" : $"[cyan]{Markup.Escape(paddedName)}[/]";
+            var ticketLabel = g.Ticket == "" ? $"[{Muted}]{paddedName}[/]" : $"[{theme.Ticket}]{Markup.Escape(paddedName)}[/]";
             summaryLines.Add(new Markup($"  {ticketLabel} {dur}"));
         }
 
         var billableMinutes = blocks.Where(b => !session.IsNonBillable(b)).Sum(b => b.Length * 15);
         var unbillableMinutes = blocks.Where(b => session.IsNonBillable(b)).Sum(b => b.Length * 15);
         var totalDur = Duration.HumanizeTotal(blocks.Sum(b => b.Length * 15));
-        summaryLines.Add(new Markup($"  [dim]{new string('─', 28)}[/]"));
+        summaryLines.Add(new Markup($"  [{Muted}]{new string('─', 28)}[/]"));
         summaryLines.Add(new Markup($"  {"Billable".PadRight(20)} {Duration.Humanize(billableMinutes)}"));
-        summaryLines.Add(new Markup($"  [grey50]{"Unbillable".PadRight(20)} {Duration.Humanize(unbillableMinutes)}[/]"));
+        summaryLines.Add(new Markup($"  [{theme.BlockNonBillable}]{"Unbillable".PadRight(20)} {Duration.Humanize(unbillableMinutes)}[/]"));
         summaryLines.Add(new Markup($"  [bold]{"Total".PadRight(20)} {totalDur}[/]"));
 
         summaryLines.Add(new Text(" "));
-        summaryLines.Add(new Markup("[dim]Esc/F3 close[/]"));
+        summaryLines.Add(new Markup($"[{Muted}]Esc/F3 close[/]"));
 
         // A single Expand-ed panel that fills the region height exactly, matching
         // the log panel beside it.
@@ -362,13 +371,14 @@ internal sealed class PunchView
 
     private static IRenderable BuildTicketPickerPanel(PunchSession session)
     {
+        var theme = session.Theme;
         var lines = new List<IRenderable>();
         if (session.Tickets.Count == 0)
         {
-            lines.Add(new Markup("[dim]No tickets found.[/]"));
+            lines.Add(new Markup($"[{Muted}]No tickets found.[/]"));
             lines.Add(new Text(" "));
-            lines.Add(new Markup("[dim]Create [/][cyan]~/.punch/tickets.txt[/][dim] with one ticket per line,[/]"));
-            lines.Add(new Markup("[dim]tab- or comma-delimited as [/][cyan]TICKET<tab|,>Title[/][dim].[/]"));
+            lines.Add(new Markup($"[{Muted}]Create [/][{theme.Ticket}]~/.punch/tickets.txt[/][{Muted}] with one ticket per line,[/]"));
+            lines.Add(new Markup($"[{Muted}]tab- or comma-delimited as [/][{theme.Ticket}]TICKET<tab|,>Title[/][{Muted}].[/]"));
         }
         else
         {
@@ -418,31 +428,31 @@ internal sealed class PunchView
             }
 
             if (hasMoreAbove)
-                lines.Add(new Markup($"  [dim]▲ {offset} more[/]"));
+                lines.Add(new Markup($"  [{Muted}]▲ {offset} more[/]"));
             for (var i = offset; i < offset + visibleRows && i < count; i++)
             {
                 var t = session.Tickets[i];
                 // Headers are emitted at a group boundary only when it falls
                 // inside the visible window.
                 if (hasHeaders && i == 0)
-                    lines.Add(new Markup("  [dim]── from the log ──[/]"));
+                    lines.Add(new Markup($"  [{Muted}]── from the log ──[/]"));
                 else if (hasHeaders && i == logCount)
-                    lines.Add(new Markup("  [dim]── from tickets.txt ──[/]"));
+                    lines.Add(new Markup($"  [{Muted}]── from tickets.txt ──[/]"));
                 // Prefix is 4 chars ("  > " / "    "); reserve the rest for the
                 // ticket + two-space gap + title, truncating the title to fit.
                 var title = Truncate(t.Title, Math.Max(1, textWidth - 4 - t.Ticket.Length - 2));
                 var ticket = Markup.Escape(t.Ticket);
                 var titleEsc = Markup.Escape(title);
                 if (i == cursor)
-                    lines.Add(new Markup($"  [bold yellow]> {ticket}[/]  {titleEsc}"));
+                    lines.Add(new Markup($"  [bold {theme.Highlight}]> {ticket}[/]  {titleEsc}"));
                 else
-                    lines.Add(new Markup($"    [cyan]{ticket}[/]  [dim]{titleEsc}[/]"));
+                    lines.Add(new Markup($"    [{theme.Ticket}]{ticket}[/]  [{Muted}]{titleEsc}[/]"));
             }
             if (hasMoreBelow)
-                lines.Add(new Markup($"  [dim]▼ {count - offset - visibleRows} more[/]"));
+                lines.Add(new Markup($"  [{Muted}]▼ {count - offset - visibleRows} more[/]"));
         }
         lines.Add(new Text(" "));
-        lines.Add(new Markup("[dim]↑/↓ select · Enter assign · Esc/F4 cancel[/]"));
+        lines.Add(new Markup($"[{Muted}]↑/↓ select · Enter assign · Esc/F4 cancel[/]"));
 
         // A single Expand-ed panel that fills the region height exactly, matching
         // the log panel beside it so the footer never gets clipped.
@@ -456,18 +466,19 @@ internal sealed class PunchView
     {
         var selectedBlock = session.SelectedBlock;
         var editing = session.Editing;
+        var theme = session.Theme;
 
         if (confirming)
         {
             _layout["Input"].Update(
-                new Panel(new Markup("[bold yellow]Press Q again to quit[/]"))
+                new Panel(new Markup($"[bold {theme.Highlight}]Press Q again to quit[/]"))
                     .Expand()
                     .Border(BoxBorder.Rounded));
         }
         else if (confirmingDelete)
         {
             _layout["Input"].Update(
-                new Panel(new Markup("[bold yellow]Press D again to delete[/]"))
+                new Panel(new Markup($"[bold {theme.Highlight}]Press D again to delete[/]"))
                     .Expand()
                     .Border(BoxBorder.Rounded));
         }
@@ -477,7 +488,7 @@ internal sealed class PunchView
             var tickLine = RenderFieldLine("Ticket", session.TicketBuffer, session.TicketCursor, session.ActiveField == 1);
             _layout["Input"].Update(
                 new Panel(new Rows(new Markup(descLine), new Markup(tickLine)))
-                    .Header("Input [cyan](editing)[/]")
+                    .Header($"Input [{theme.Ticket}](editing)[/]")
                     .Expand()
                     .Border(BoxBorder.Rounded));
         }
@@ -486,7 +497,7 @@ internal sealed class PunchView
             var labelText = Markup.Escape(selectedBlock.Label);
             var ticketText = Markup.Escape(selectedBlock.Ticket);
             var descLine = $"[bold]Description:[/] {labelText}";
-            var tickLine = $"[bold]Ticket:[/]      {(string.IsNullOrEmpty(ticketText) ? "[dim]none[/]" : ticketText)}";
+            var tickLine = $"[bold]Ticket:[/]      {(string.IsNullOrEmpty(ticketText) ? $"[{Muted}]none[/]" : ticketText)}";
             _layout["Input"].Update(
                 new Panel(new Rows(new Markup(descLine), new Markup(tickLine)))
                     .Header("Input")
@@ -508,6 +519,7 @@ internal sealed class PunchView
     private void RenderStatusBar(PunchSession session)
     {
         var consoleWidth = System.Console.WindowWidth;
+        var theme = session.Theme;
         var filePath = session.FilePath;
         var totalMinutesAll = session.Blocks.Where(b => !session.IsNonBillable(b)).Sum(b => b.Length * 15);
         var totalFormatted = Duration.HumanizeTotal(totalMinutesAll);
@@ -525,21 +537,21 @@ internal sealed class PunchView
             var gaugeFilled = new string('▰', filled);
             var gaugeEmpty = new string('▱', 10 - filled);
             statusRightPlain = $"{totalFormatted}  {gaugeFilled}{gaugeEmpty}  {percent}% of {targetLabel}h  ";
-            statusRightMarkup = $"[bold white]{Markup.Escape(totalFormatted)}  [/][bold yellow]{gaugeFilled}[/][dim]{gaugeEmpty}[/][bold white]  {percent}% of {targetLabel}h  [/]";
+            statusRightMarkup = $"[bold {theme.StatusBarText}]{Markup.Escape(totalFormatted)}  [/][bold {theme.GaugeFilled}]{gaugeFilled}[/][{Muted}]{gaugeEmpty}[/][bold {theme.StatusBarText}]  {percent}% of {targetLabel}h  [/]";
             // On narrow terminals the gauge is the first thing to go.
             if (statusLeftPlain.Length + statusRightPlain.Length > consoleWidth)
             {
                 statusRightPlain = $"{totalFormatted}    {percent}% of {targetLabel}h  ";
-                statusRightMarkup = $"[bold white]{Markup.Escape(statusRightPlain)}[/]";
+                statusRightMarkup = $"[bold {theme.StatusBarText}]{Markup.Escape(statusRightPlain)}[/]";
             }
         }
         else
         {
             statusRightPlain = $"{totalFormatted}  ";
-            statusRightMarkup = $"[bold white]{Markup.Escape(statusRightPlain)}[/]";
+            statusRightMarkup = $"[bold {theme.StatusBarText}]{Markup.Escape(statusRightPlain)}[/]";
         }
         var padding = Math.Max(0, consoleWidth - statusLeftPlain.Length - statusRightPlain.Length);
-        var statusBar = $"[white on orangered1]  {Markup.Escape(filePath)}  [bold yellow]?=help F3=summary F4=tickets[/]{new string(' ', padding)}{statusRightMarkup}[/]";
+        var statusBar = $"[{theme.StatusBarText} on {theme.StatusBarBackground}]  {Markup.Escape(filePath)}  [bold {theme.StatusBarAccent}]?=help F3=summary F4=tickets[/]{new string(' ', padding)}{statusRightMarkup}[/]";
         _layout["StatusBar"].Update(new Markup(statusBar));
     }
 
@@ -557,8 +569,8 @@ internal sealed class PunchView
         else
         {
             var escaped = Markup.Escape(buffer.ToString());
-            var display = string.IsNullOrEmpty(escaped) ? "[dim]empty[/]" : $"[dim]{escaped}[/]";
-            return $"[dim]{Markup.Escape(paddedName)}:[/] {display}";
+            var display = string.IsNullOrEmpty(escaped) ? $"[{Muted}]empty[/]" : $"[{Muted}]{escaped}[/]";
+            return $"[{Muted}]{Markup.Escape(paddedName)}:[/] {display}";
         }
     }
 }

@@ -424,3 +424,6 @@ FodyWeavers.xsd
 *.msix
 *.msm
 *.msp
+
+# Claude Code agent worktrees
+.claude/worktrees/

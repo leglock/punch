@@ -32,8 +32,8 @@ if [[ $missing -ne 0 ]]; then
 Install the missing tools, e.g. (Linux x86_64):
 
   mkdir -p ~/.local/bin
-  # vhs
-  curl -fsSL https://github.com/charmbracelet/vhs/releases/latest/download/vhs_Linux_x86_64.tar.gz \
+  # vhs (release assets are versioned — bump to the latest from the releases page)
+  curl -fsSL https://github.com/charmbracelet/vhs/releases/download/v0.12.1/vhs_0.12.1_Linux_x86_64.tar.gz \
     | tar -xz -C /tmp && install /tmp/vhs*/vhs ~/.local/bin/vhs
   # ttyd
   curl -fsSL -o ~/.local/bin/ttyd \
@@ -72,6 +72,13 @@ EOF
 chmod +x "$tmp/bin/punch"
 
 # --- record ----------------------------------------------------------------
+# Ubuntu 24.04+ blocks unprivileged user namespaces via AppArmor, which kills
+# VHS's headless Chrome on launch ("browser exited unexpectedly"). It only
+# loads the local ttyd page, so running it unsandboxed is fine.
+if [[ "$(cat /proc/sys/kernel/apparmor_restrict_unprivileged_userns 2>/dev/null)" == "1" ]]; then
+    export VHS_NO_SANDBOX=true
+fi
+
 echo ">> recording with VHS..."
 HOME="$tmp" PATH="$tmp/bin:$PATH" vhs "$repo_root/scripts/punch-demo.tape"
 

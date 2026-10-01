@@ -2,8 +2,8 @@
 # (the wrapper builds the app, seeds an isolated ~/.punch, and puts a `punch`
 #  shim on PATH so the launch line below works deterministically).
 #
-# VHS can't send function keys, so this drives the ticket picker/summary via the
-# Ctrl+P / Ctrl+T aliases (see PunchController).
+# VHS can't send function keys, so this drives the ticket picker/summary/theme
+# cycling via the Ctrl+P / Ctrl+T / Ctrl+R aliases (see PunchController).
 
 Output assets/punch-demo.gif
 
@@ -79,6 +79,17 @@ Ctrl+T
 Sleep 3500ms
 Ctrl+T
 Sleep 1s
+
+# --- cycle every built-in color theme (Ctrl+R) and land back on ember ---
+# ember -> meadow -> glacier -> blossom -> ember
+Ctrl+R
+Sleep 1800ms
+Ctrl+R
+Sleep 1800ms
+Ctrl+R
+Sleep 1800ms
+Ctrl+R
+Sleep 1500ms
 
 # --- help overlay ---
 Type "?"

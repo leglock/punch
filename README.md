@@ -17,7 +17,7 @@ A TUI time tracker for your workday. Log, label, and export your hours without l
 - Day timeline split into 96 quarter-hour slots — select a range and book it
 - Label each entry with a description and an optional ticket number
 - Pick a ticket from a list (F4) maintained in `~/.punch/tickets.txt`, plus any ticket already used that day
-- Edit and resize existing entries in place
+- Edit, move, and resize existing entries in place
 - Running workday total in the status bar, with non-billable blocks (lunch and breaks by default, configurable) excluded
 - Ticket summary view (F3) totalling time per ticket, with billable/unbillable subtotals
 - Scrollable time log for busy days
@@ -51,20 +51,22 @@ the entry. Navigating onto an existing entry selects it for editing or deletion.
 
 ## Keybindings
 
-| Key          | Action                              |
-|--------------|-------------------------------------|
-| Left/Right   | Move cursor / jump between blocks   |
-| Up/Down      | Resize selection                    |
-| PgUp/PgDn    | Scroll time log                     |
-| Enter        | Log time entry                      |
-| Tab          | Switch input field                  |
-| Ctrl+E       | Edit selected entry                 |
-| Ctrl+D       | Delete selected entry               |
-| F3 / Ctrl+T  | Ticket summary                      |
-| F4 / Ctrl+P  | Pick a ticket                       |
-| F5 / Ctrl+R  | Cycle color theme                   |
-| ?            | Toggle help                         |
-| Ctrl+Q, Q    | Quit                                |
+| Key              | Action                                   |
+|------------------|------------------------------------------|
+| Left/Right       | Move cursor / jump between blocks        |
+| Up/Down          | Size the selection for a new entry       |
+| PgUp/PgDn        | Scroll time log                          |
+| Enter            | Log time entry                           |
+| Tab              | Switch input field                       |
+| Ctrl+E           | Edit selected entry                      |
+| Shift+Left/Right | Move entry earlier/later (while editing) |
+| Shift+Up/Down    | Grow/shrink entry (while editing)        |
+| Ctrl+D           | Delete selected entry                    |
+| F3 / Ctrl+T      | Ticket summary                           |
+| F4 / Ctrl+P      | Pick a ticket                            |
+| F5 / Ctrl+R      | Cycle color theme                        |
+| ?                | Toggle help                              |
+| Ctrl+Q, Q        | Quit                                     |
 
 ## Data
 

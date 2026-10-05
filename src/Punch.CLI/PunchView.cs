@@ -57,6 +57,10 @@ internal sealed class PunchView
         for (var blockIdx = 0; blockIdx < sorted.Count; blockIdx++)
         {
             var block = sorted[blockIdx];
+            // The block being edited is drawn by the selection overlay at its
+            // previewed span, so don't also paint it at its saved position.
+            if (session.Editing && block == selectedBlock)
+                continue;
             var bStart = SlotToPixel(block.StartSlot);
             var bEndExcl = SlotToPixel(block.StartSlot + block.Length);
             bStart = Math.Clamp(bStart, 0, totalBarWidth);
@@ -297,6 +301,7 @@ internal sealed class PunchView
         var helpText = new Markup(
             "[bold]Left/Right[/]  Move cursor / Jump between blocks\n" +
             "[bold]Up/Down[/]     Resize selection\n" +
+            "[bold]Shift+Arrows[/] Move / resize entry (editing)\n" +
             "[bold]PgUp/PgDn[/]   Scroll time log\n" +
             "[bold]Enter[/]       Log time entry\n" +
             "[bold]Tab[/]         Switch input field\n" +

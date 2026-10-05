@@ -66,10 +66,11 @@ Sleep 1s
 Enter
 Sleep 1800ms
 
-# --- edit the selected entry in place (Ctrl+E), extend by 15 min ---
+# --- edit the selected entry in place (Ctrl+E), amend its description ---
+# (moving/resizing an entry needs Shift+arrows, which VHS can't send)
 Ctrl+E
 Sleep 1s
-Up 1
+Type " + fixes"
 Sleep 1s
 Enter
 Sleep 1800ms

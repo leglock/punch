@@ -45,8 +45,8 @@ public class PunchControllerTests : IDisposable
         return (controller, session);
     }
 
-    private static ConsoleKeyInfo Key(ConsoleKey key, char ch = '\0', bool ctrl = false) =>
-        new(ch, key, shift: false, alt: false, control: ctrl);
+    private static ConsoleKeyInfo Key(ConsoleKey key, char ch = '\0', bool ctrl = false, bool shift = false) =>
+        new(ch, key, shift: shift, alt: false, control: ctrl);
 
     private static ConsoleKeyInfo Ch(char c) => new(c, 0, shift: false, alt: false, control: false);
 
@@ -443,42 +443,289 @@ public class PunchControllerTests : IDisposable
     }
 
     [Fact]
-    public void UpArrow_WhileEditing_GrowsWhenNextSlotFree()
+    public void ShiftUp_WhileEditing_GrowsWhenNextSlotFree()
     {
         var (controller, session) = Create(cursorSlot: 35, blocks: new TimeBlock(33, 2, "task", ""));
         SelectByLeftArrow(controller);
         controller.HandleKey(Key(ConsoleKey.E, ctrl: true));
 
-        controller.HandleKey(Key(ConsoleKey.UpArrow));
+        controller.HandleKey(Key(ConsoleKey.UpArrow, shift: true));
 
         Assert.Equal(3, session.SelectionLength);
     }
 
     [Fact]
-    public void UpArrow_WhileEditing_BlockedByNeighbor_DoesNotGrow()
+    public void ShiftUp_WhileEditing_BlockedByNeighbor_DoesNotGrow()
     {
         var (controller, session) = Create(cursorSlot: 32,
             blocks: new[] { new TimeBlock(33, 2, "task", ""), new TimeBlock(35, 1, "next", "") });
         controller.HandleKey(Key(ConsoleKey.RightArrow)); // select first
         controller.HandleKey(Key(ConsoleKey.E, ctrl: true));
 
-        controller.HandleKey(Key(ConsoleKey.UpArrow));
+        controller.HandleKey(Key(ConsoleKey.UpArrow, shift: true));
 
         Assert.Equal(2, session.SelectionLength);
     }
 
     [Fact]
-    public void DownArrow_WhileEditing_ShrinksToMinOne()
+    public void ShiftDown_WhileEditing_ShrinksToMinOne()
     {
         var (controller, session) = Create(cursorSlot: 35, blocks: new TimeBlock(33, 2, "task", ""));
         SelectByLeftArrow(controller);
         controller.HandleKey(Key(ConsoleKey.E, ctrl: true));
 
-        controller.HandleKey(Key(ConsoleKey.DownArrow));
+        controller.HandleKey(Key(ConsoleKey.DownArrow, shift: true));
         Assert.Equal(1, session.SelectionLength);
 
-        controller.HandleKey(Key(ConsoleKey.DownArrow));
+        controller.HandleKey(Key(ConsoleKey.DownArrow, shift: true));
         Assert.Equal(1, session.SelectionLength);
+    }
+
+    [Fact]
+    public void PlainUpDown_WhileEditing_DoNotResize()
+    {
+        var (controller, session) = Create(cursorSlot: 35, blocks: new TimeBlock(33, 2, "task", ""));
+        SelectByLeftArrow(controller);
+        controller.HandleKey(Key(ConsoleKey.E, ctrl: true));
+
+        controller.HandleKey(Key(ConsoleKey.UpArrow));
+        Assert.Equal(2, session.SelectionLength);
+
+        controller.HandleKey(Key(ConsoleKey.DownArrow));
+        Assert.Equal(2, session.SelectionLength);
+    }
+
+    // --- Move (Shift+Left/Right while editing) ---
+
+    [Fact]
+    public void ShiftLeft_WhileEditing_MovesEarlierAndEnterCommits()
+    {
+        var (controller, session) = Create(cursorSlot: 35, blocks: new TimeBlock(33, 2, "task", "ABC-1"));
+        SelectByLeftArrow(controller);
+        controller.HandleKey(Key(ConsoleKey.E, ctrl: true));
+
+        controller.HandleKey(Key(ConsoleKey.LeftArrow, shift: true));
+        Assert.Equal(32, session.CursorSlot);
+        Assert.Equal(2, session.SelectionLength);
+        Assert.Equal(4, session.InputCursor); // text cursor untouched
+
+        controller.HandleKey(Key(ConsoleKey.Enter));
+
+        var expected = new TimeBlock(32, 2, "task", "ABC-1");
+        Assert.Equal(expected, Assert.Single(session.Blocks));
+        Assert.Equal(expected, Assert.Single(PunchStorage.Load(Date)));
+        Assert.Equal(expected, session.SelectedBlock);
+        Assert.False(session.Schedule.IsFree(32));
+        Assert.False(session.Schedule.IsFree(33));
+        Assert.True(session.Schedule.IsFree(34));
+        Assert.False(session.Editing);
+    }
+
+    [Fact]
+    public void ShiftRight_WhileEditing_MovesLaterAndEnterCommits()
+    {
+        var (controller, session) = Create(cursorSlot: 35, blocks: new TimeBlock(33, 2, "task", ""));
+        SelectByLeftArrow(controller);
+        controller.HandleKey(Key(ConsoleKey.E, ctrl: true));
+
+        controller.HandleKey(Key(ConsoleKey.RightArrow, shift: true));
+        controller.HandleKey(Key(ConsoleKey.RightArrow, shift: true));
+        Assert.Equal(35, session.CursorSlot);
+
+        controller.HandleKey(Key(ConsoleKey.Enter));
+
+        var expected = new TimeBlock(35, 2, "task", "");
+        Assert.Equal(expected, Assert.Single(session.Blocks));
+        Assert.Equal(expected, Assert.Single(PunchStorage.Load(Date)));
+        Assert.True(session.Schedule.IsFree(33));
+        Assert.True(session.Schedule.IsFree(34));
+        Assert.False(session.Schedule.IsFree(36));
+    }
+
+    [Fact]
+    public void ShiftArrows_WhileEditing_BlockedByAdjacentBlocks_DoNotMove()
+    {
+        var (controller, session) = Create(cursorSlot: 36, blocks: new[]
+        {
+            new TimeBlock(32, 1, "before", ""),
+            new TimeBlock(33, 2, "task", ""),
+            new TimeBlock(35, 1, "after", ""),
+        });
+        SelectByLeftArrow(controller); // "after"
+        SelectByLeftArrow(controller); // "task"
+        controller.HandleKey(Key(ConsoleKey.E, ctrl: true));
+
+        controller.HandleKey(Key(ConsoleKey.LeftArrow, shift: true));
+        Assert.Equal(33, session.CursorSlot);
+
+        controller.HandleKey(Key(ConsoleKey.RightArrow, shift: true));
+        Assert.Equal(33, session.CursorSlot);
+    }
+
+    [Fact]
+    public void ShiftLeft_WhileEditing_StopsAtPreviousBlock()
+    {
+        // Two free slots (31, 32) between the blocks: only two moves land.
+        var (controller, session) = Create(cursorSlot: 35, blocks: new[]
+        {
+            new TimeBlock(29, 2, "before", ""),
+            new TimeBlock(33, 2, "task", ""),
+        });
+        SelectByLeftArrow(controller);
+        controller.HandleKey(Key(ConsoleKey.E, ctrl: true));
+
+        for (var i = 0; i < 3; i++)
+            controller.HandleKey(Key(ConsoleKey.LeftArrow, shift: true));
+
+        Assert.Equal(31, session.CursorSlot);
+
+        controller.HandleKey(Key(ConsoleKey.Enter));
+        Assert.Contains(new TimeBlock(31, 2, "task", ""), session.Blocks);
+        Assert.Contains(new TimeBlock(29, 2, "before", ""), session.Blocks);
+    }
+
+    [Fact]
+    public void ShiftLeft_WhileEditing_AtStartOfDay_DoesNotMove()
+    {
+        var (controller, session) = Create(cursorSlot: 2, blocks: new TimeBlock(0, 2, "task", ""));
+        SelectByLeftArrow(controller);
+        controller.HandleKey(Key(ConsoleKey.E, ctrl: true));
+
+        controller.HandleKey(Key(ConsoleKey.LeftArrow, shift: true));
+
+        Assert.Equal(0, session.CursorSlot);
+    }
+
+    [Fact]
+    public void ShiftRight_WhileEditing_AtEndOfDay_DoesNotMove()
+    {
+        var (controller, session) = Create(cursorSlot: 93, blocks: new TimeBlock(94, 2, "task", ""));
+        controller.HandleKey(Key(ConsoleKey.RightArrow)); // select
+        controller.HandleKey(Key(ConsoleKey.E, ctrl: true));
+
+        controller.HandleKey(Key(ConsoleKey.RightArrow, shift: true));
+
+        Assert.Equal(94, session.CursorSlot);
+    }
+
+    [Fact]
+    public void ShiftUp_AfterMove_GrowsFromMovedPosition()
+    {
+        // The neighbour sits right after the block's saved span, so growing is
+        // only possible once the block has been moved away from it.
+        var (controller, session) = Create(cursorSlot: 32, blocks: new[]
+        {
+            new TimeBlock(33, 2, "task", ""),
+            new TimeBlock(35, 1, "after", ""),
+        });
+        controller.HandleKey(Key(ConsoleKey.RightArrow)); // select "task"
+        controller.HandleKey(Key(ConsoleKey.E, ctrl: true));
+
+        controller.HandleKey(Key(ConsoleKey.LeftArrow, shift: true));
+        controller.HandleKey(Key(ConsoleKey.UpArrow, shift: true));
+        Assert.Equal(32, session.CursorSlot);
+        Assert.Equal(3, session.SelectionLength);
+
+        controller.HandleKey(Key(ConsoleKey.UpArrow, shift: true)); // now touching "after"
+        Assert.Equal(3, session.SelectionLength);
+
+        controller.HandleKey(Key(ConsoleKey.Enter));
+        Assert.Contains(new TimeBlock(32, 3, "task", ""), session.Blocks);
+        Assert.Equal(2, PunchStorage.Load(Date).Count);
+    }
+
+    [Fact]
+    public void Enter_DuringEdit_CommitsMoveResizeAndLabelTogether()
+    {
+        var (controller, session) = Create(cursorSlot: 35, blocks: new TimeBlock(33, 2, "task", ""));
+        SelectByLeftArrow(controller);
+        controller.HandleKey(Key(ConsoleKey.E, ctrl: true));
+        Type(controller, "2");
+        controller.HandleKey(Key(ConsoleKey.RightArrow, shift: true)); // 33 -> 34
+        controller.HandleKey(Key(ConsoleKey.DownArrow, shift: true)); // 2 -> 1
+
+        controller.HandleKey(Key(ConsoleKey.Enter));
+
+        var expected = new TimeBlock(34, 1, "task2", "");
+        Assert.Equal(expected, Assert.Single(session.Blocks));
+        Assert.Equal(expected, Assert.Single(PunchStorage.Load(Date)));
+        Assert.True(session.Schedule.IsFree(33));
+        Assert.True(session.Schedule.IsFree(35));
+    }
+
+    [Fact]
+    public void ShiftArrows_OnSelectedBlockNotEditing_AreNoOps()
+    {
+        var original = new TimeBlock(33, 2, "task", "");
+        var (controller, session) = Create(cursorSlot: 35, blocks: original);
+        SelectByLeftArrow(controller);
+
+        controller.HandleKey(Key(ConsoleKey.LeftArrow, shift: true));
+        controller.HandleKey(Key(ConsoleKey.RightArrow, shift: true));
+
+        Assert.Equal(original, session.SelectedBlock);
+        Assert.Equal(33, session.CursorSlot);
+        Assert.Equal(original, Assert.Single(session.Blocks));
+    }
+
+    [Fact]
+    public void ShiftArrows_FreeCursor_DoNotMoveCursor()
+    {
+        var (controller, session) = Create();
+
+        controller.HandleKey(Key(ConsoleKey.LeftArrow, shift: true));
+        controller.HandleKey(Key(ConsoleKey.RightArrow, shift: true));
+        controller.HandleKey(Key(ConsoleKey.RightArrow, shift: true));
+
+        Assert.Equal(32, session.CursorSlot);
+    }
+
+    [Fact]
+    public void Arrow_AbandoningMovedEdit_RestoresOriginalSpan()
+    {
+        var original = new TimeBlock(33, 2, "task", "");
+        var (controller, session) = Create(cursorSlot: 35, blocks: original);
+        SelectByLeftArrow(controller);
+        controller.HandleKey(Key(ConsoleKey.E, ctrl: true));
+        controller.HandleKey(Key(ConsoleKey.RightArrow, shift: true));
+        controller.HandleKey(Key(ConsoleKey.RightArrow, shift: true));
+
+        for (var i = 0; i < 4; i++)
+            controller.HandleKey(Key(ConsoleKey.Backspace));
+        controller.HandleKey(Key(ConsoleKey.RightArrow)); // abandon, step off the block
+
+        Assert.False(session.Editing);
+        Assert.Equal(original, Assert.Single(session.Blocks));
+        Assert.False(session.Schedule.IsFree(33));
+        Assert.False(session.Schedule.IsFree(34));
+        Assert.True(session.Schedule.IsFree(36));
+        Assert.Null(session.SelectedBlock);
+        Assert.Equal(35, session.CursorSlot);
+        Assert.Empty(PunchStorage.Load(Date)); // nothing was ever saved
+    }
+
+    [Fact]
+    public void Arrow_AbandoningMovedEdit_AtStartOfDay_SnapsSelectionBack()
+    {
+        // Left from a block at slot 0 has nowhere to go, so the block stays
+        // selected; its selection must return to the saved span.
+        var original = new TimeBlock(0, 2, "task", "");
+        var (controller, session) = Create(cursorSlot: 2, blocks: original);
+        SelectByLeftArrow(controller);
+        controller.HandleKey(Key(ConsoleKey.E, ctrl: true));
+        controller.HandleKey(Key(ConsoleKey.RightArrow, shift: true));
+        controller.HandleKey(Key(ConsoleKey.UpArrow, shift: true));
+
+        for (var i = 0; i < 4; i++)
+            controller.HandleKey(Key(ConsoleKey.Backspace));
+        controller.HandleKey(Key(ConsoleKey.LeftArrow));
+
+        Assert.False(session.Editing);
+        Assert.Equal(original, session.SelectedBlock);
+        Assert.Equal(0, session.CursorSlot);
+        Assert.Equal(2, session.SelectionLength);
+        Assert.False(session.Schedule.IsFree(0));
+        Assert.True(session.Schedule.IsFree(2));
     }
 
     // --- Edit flow (Ctrl+E) ---
@@ -534,7 +781,7 @@ public class PunchControllerTests : IDisposable
         Type(controller, "2");
         controller.HandleKey(Key(ConsoleKey.Tab));
         Type(controller, "xyz-9");
-        controller.HandleKey(Key(ConsoleKey.DownArrow)); // shrink 2 -> 1
+        controller.HandleKey(Key(ConsoleKey.DownArrow, shift: true)); // shrink 2 -> 1
 
         controller.HandleKey(Key(ConsoleKey.Enter));
 

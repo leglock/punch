@@ -28,7 +28,7 @@ Two-project .NET 10 solution (`Punch.slnx`): the `Punch.CLI` console app (`src/P
 Test suites that mutate the shared static `PunchStorage.DataDirectoryOverride` must be tagged `[Collection(StorageCollection.Name)]` so xUnit serializes them (they'd otherwise clobber each other's temp data dir in parallel).
 
 - **`PunchCommand`** — thin default command (~80 lines): parses args, loads the day, sets up the `AnsiConsole.Live` full-screen TUI, then hands off to `PunchController`.
-- **`PunchController`** — owns the `while(true)` keyboard loop (`Console.ReadKey`); `Run` dispatches each key to a named handler (`HandleLeftArrow`, `HandleGrow`, `HandleEditStart`, `HandleEnter`, `HandleTextInput`, …) that mutates the `PunchSession`, then persists and re-renders.
+- **`PunchController`** — owns the `while(true)` keyboard loop (`Console.ReadKey`); `Run` dispatches each key to a named handler (`HandleLeftArrow`, `HandleGrow`, `HandleMoveEarlier`, `HandleEditStart`, `HandleEnter`, `HandleTextInput`, …) that mutates the `PunchSession`, then persists and re-renders.
 - **`PunchSession`** — mutable editor state (input fields, cursor/selection, view toggles) plus the `DaySchedule`. `ActiveBuffer`/`ActiveCursor` route input to the focused field; `ResetInput` clears it.
 - **`DaySchedule`** — aggregate owning the block list **and** the 96-slot `occupied[]` mask as an invariant. The ONLY place occupancy is mutated — never touch a raw `occupied[]` outside it. Exposes `Add/Remove/Replace/FindAt/IsFree/IsOverlapping/CanGrow/AdvanceAfterAdd`, plus `FreeSlots`/`FillSlots` for the Ctrl+E edit lift.
 - **`PunchView`** — all Spectre rendering, split into `RenderTimeline/Messages/Help/TicketSummary/TicketPicker/Input/StatusBar`, driven by the `PunchSession`. The ticket picker renders beside the time log.
@@ -52,9 +52,9 @@ Test suites that mutate the shared static `PunchStorage.DataDirectoryOverride` m
 ### TUI State Model
 
 The TUI has three modes driven by `PunchSession` state, handled in `PunchController`:
-1. **Free cursor** (`selectedBlock == null, !editing`) — arrow keys move cursor/resize selection, typing fills the input buffer, Enter books a new block.
+1. **Free cursor** (`selectedBlock == null, !editing`) — Left/Right move the cursor, Up/Down size the selection for a new entry, typing fills the input buffer, Enter books a new block.
 2. **Block selected** (`selectedBlock != null, !editing`) — navigating onto a booked block selects it. Ctrl+E enters edit mode, Ctrl+D deletes.
-3. **Editing** (`selectedBlock != null, editing`) — input buffer is pre-filled with the block's label and ticket; Enter saves the edit (description must be non-empty).
+3. **Editing** (`selectedBlock != null, editing`) — input buffer is pre-filled with the block's label and ticket; Enter saves the edit (description must be non-empty). Shift+Left/Right move the block a slot earlier/later and Shift+Up/Down grow/shrink it, bounded by neighbouring blocks and the day's edges (plain Up/Down do nothing here; plain Left/Right move the text cursor, or abandon the edit when the active field is empty). The pending span lives in `CursorSlot`/`SelectionLength` — the block's own slots are freed on Ctrl+E — and is only written back on Enter.
 
 Two modal overlays layer over these modes (state on `PunchSession`):
 - **Ticket picker** (`ShowTicketPicker`, F4 or Ctrl+P) — opens for the selected block, or while composing a new entry; not while editing (the Ticket field is already live there and Enter means "save the edit"). Rebuilds `Tickets` on open via `TicketCatalog.Build` (fresh `tickets.txt` read + the day's own tickets), arrows move `TicketPickerCursor`, Esc/F4/Ctrl+P cancel. All other keys are swallowed while open. Enter (`ApplyTicketPick`) branches on `SelectedBlock`: with a block it writes the ticket onto it via `Schedule.Replace` and saves; while composing it fills `TicketBuffer` instead, leaving `InputBuffer` and `ActiveField` untouched so typing resumes — nothing is persisted until Enter books the entry.
@@ -62,7 +62,7 @@ Two modal overlays layer over these modes (state on `PunchSession`):
 
 F5 (or Ctrl+R) cycles `PunchSession.Theme` and persists the name to `state.json`; it's handled before the overlays so it works while help/picker/summary are open.
 
-The Ctrl+P/Ctrl+T/Ctrl+R aliases mirror F4/F3/F5 so terminal recorders (VHS, used by `scripts/record-demo.sh` to refresh the README GIF) that can't send function keys can still drive the picker and summary.
+The Ctrl+P/Ctrl+T/Ctrl+R aliases mirror F4/F3/F5 so terminal recorders (VHS, used by `scripts/record-demo.sh` to refresh the README GIF) that can't send function keys can still drive the picker and summary. VHS can't send Shift+arrows either, and there is no alias for those, so the demo tape doesn't show moving/resizing an entry.
 
 The input panel has two stacked fields (Description and Ticket) with Tab to switch focus. The active field shows a bold label and inverted cursor; the inactive field is dimmed. Ticket input is auto-uppercased. `PunchSession.ActiveField` (0=Description, 1=Ticket) tracks focus; `ActiveBuffer`/`ActiveCursor` route input to it.
 

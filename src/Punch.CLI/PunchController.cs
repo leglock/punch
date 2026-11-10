@@ -233,8 +233,15 @@ internal sealed class PunchController
 
     private void DispatchKey(ConsoleKeyInfo key)
     {
+        var shift = key.Modifiers.HasFlag(ConsoleModifiers.Shift);
         switch (key.Key)
         {
+            case ConsoleKey.LeftArrow when shift:
+                HandleMoveEarlier();
+                break;
+            case ConsoleKey.RightArrow when shift:
+                HandleMoveLater();
+                break;
             case ConsoleKey.LeftArrow:
                 HandleLeftArrow();
                 break;
@@ -242,10 +249,10 @@ internal sealed class PunchController
                 HandleRightArrow();
                 break;
             case ConsoleKey.UpArrow:
-                HandleGrow();
+                HandleGrow(shift);
                 break;
             case ConsoleKey.DownArrow:
-                HandleShrink();
+                HandleShrink(shift);
                 break;
             case ConsoleKey.PageUp:
                 _session.LogScrollOffset = Math.Max(0, _session.LogScrollOffset - 5);
@@ -302,9 +309,13 @@ internal sealed class PunchController
         }
 
         // Otherwise it moves along the timeline.
-        // If abandoning an edit, restore the block's original slots (freed on Ctrl+E).
+        // If abandoning an edit, restore the block's original slots (freed on Ctrl+E)
+        // and snap the selection back off any previewed move/resize.
         if (_session.Editing && _session.SelectedBlock != null)
+        {
             Schedule.FillSlots(_session.SelectedBlock);
+            SelectBlock(_session.SelectedBlock);
+        }
 
         if (_session.SelectedBlock != null)
         {
@@ -338,9 +349,13 @@ internal sealed class PunchController
         }
 
         // Otherwise it moves along the timeline.
-        // If abandoning an edit, restore the block's original slots (freed on Ctrl+E).
+        // If abandoning an edit, restore the block's original slots (freed on Ctrl+E)
+        // and snap the selection back off any previewed move/resize.
         if (_session.Editing && _session.SelectedBlock != null)
+        {
             Schedule.FillSlots(_session.SelectedBlock);
+            SelectBlock(_session.SelectedBlock);
+        }
 
         if (_session.SelectedBlock != null)
         {
@@ -386,7 +401,9 @@ internal sealed class PunchController
         _session.SelectedBlock = block;
     }
 
-    private void HandleGrow()
+    // Up sizes the free selection for a new entry. A logged entry only resizes
+    // while editing, and only with Shift held (matching Shift+Left/Right to move).
+    private void HandleGrow(bool shift)
     {
         if (_session.SelectedBlock == null)
         {
@@ -394,25 +411,43 @@ internal sealed class PunchController
             if (_session.CursorSlot + newLen <= 96 && !Schedule.IsOverlapping(_session.CursorSlot, newLen))
                 _session.SelectionLength = newLen;
         }
-        else if (_session.Editing && Schedule.CanGrow(_session.SelectedBlock.StartSlot, _session.SelectionLength))
+        else if (shift && _session.Editing && Schedule.CanGrow(_session.CursorSlot, _session.SelectionLength))
         {
             _session.SelectionLength++;
         }
     }
 
-    private void HandleShrink()
+    private void HandleShrink(bool shift)
     {
         if (_session.SelectedBlock == null && _session.SelectionLength > 1)
             _session.SelectionLength--;
-        else if (_session.Editing && _session.SelectedBlock != null && _session.SelectionLength > 1)
+        else if (shift && _session.Editing && _session.SelectedBlock != null && _session.SelectionLength > 1)
             _session.SelectionLength--;
+    }
+
+    // Shift+Left while editing: slide the entry one slot earlier if the slot
+    // before it is free. The edited block's own slots were freed on Ctrl+E, so
+    // only its neighbours (and the start of the day) stop it.
+    private void HandleMoveEarlier()
+    {
+        if (_session.Editing && _session.SelectedBlock != null && Schedule.IsFree(_session.CursorSlot - 1))
+            _session.CursorSlot--;
+    }
+
+    // Shift+Right while editing: slide the entry one slot later if the slot
+    // after it is free.
+    private void HandleMoveLater()
+    {
+        if (_session.Editing && _session.SelectedBlock != null
+            && Schedule.CanGrow(_session.CursorSlot, _session.SelectionLength))
+            _session.CursorSlot++;
     }
 
     private void HandleEditStart()
     {
-        // Ctrl+E: edit the selected block's label, ticket, and length. Free the
-        // block's slots so a live resize can reuse them; the abandon paths (Left/
-        // Right) re-fill them, and Enter re-derives occupancy via Replace.
+        // Ctrl+E: edit the selected block's label, ticket, start, and length. Free
+        // the block's slots so a live move/resize can reuse them; the abandon paths
+        // (Left/Right) re-fill them, and Enter re-derives occupancy via Replace.
         if (_session.SelectedBlock == null || _session.Editing)
             return;
 
@@ -434,10 +469,11 @@ internal sealed class PunchController
     {
         if (_session.Editing && _session.SelectedBlock != null && _session.InputBuffer.Length > 0)
         {
-            // Save the edited label, ticket, and (possibly resized) length. The
+            // Save the edited label, ticket, and (possibly moved/resized) span. The
             // block's original slots were freed on Ctrl+E; Replace re-derives them.
             var edited = _session.SelectedBlock with
             {
+                StartSlot = _session.CursorSlot,
                 Length = _session.SelectionLength,
                 Label = _session.InputBuffer.ToString(),
                 Ticket = _session.TicketBuffer.ToString(),

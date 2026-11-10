@@ -77,6 +77,12 @@ internal sealed class PunchController
             return false;
         }
 
+        if (_session.EditingNote)
+        {
+            HandleNoteKey(key);
+            return false;
+        }
+
         // Any key dismisses help.
         if (_session.ShowHelp)
         {
@@ -146,6 +152,16 @@ internal sealed class PunchController
             return false;
         }
 
+        if (key.Key == ConsoleKey.F6
+            || (key.Key == ConsoleKey.N && key.Modifiers.HasFlag(ConsoleModifiers.Control)))
+        {
+            _session.NoteBuffer.Clear();
+            _session.NoteBuffer.Append(_session.Note);
+            _session.NoteCursor = _session.NoteBuffer.Length;
+            _session.EditingNote = true;
+            return false;
+        }
+
         // Toggle help when not typing: a selected block parks the input
         // fields, so '?' is free over an occupied slot. With a free cursor
         // it only toggles when the input fields are empty so '?' can still
@@ -169,6 +185,50 @@ internal sealed class PunchController
         AutoScrollToSelection();
         ClampScrollOffset();
         return false;
+    }
+
+    private void HandleNoteKey(ConsoleKeyInfo key)
+    {
+        var buffer = _session.NoteBuffer;
+        var cursor = _session.NoteCursor;
+        switch (key.Key)
+        {
+            case ConsoleKey.Escape:
+            case ConsoleKey.F6:
+            case ConsoleKey.N when key.Modifiers.HasFlag(ConsoleModifiers.Control):
+                _session.EditingNote = false;
+                break;
+            case ConsoleKey.Enter:
+                _session.Note = buffer.ToString();
+                Save();
+                _session.EditingNote = false;
+                break;
+            case ConsoleKey.LeftArrow:
+                cursor = Math.Max(0, cursor - 1);
+                break;
+            case ConsoleKey.RightArrow:
+                cursor = Math.Min(buffer.Length, cursor + 1);
+                break;
+            case ConsoleKey.Home:
+                cursor = 0;
+                break;
+            case ConsoleKey.End:
+                cursor = buffer.Length;
+                break;
+            case ConsoleKey.Backspace:
+                if (cursor > 0)
+                    buffer.Remove(--cursor, 1);
+                break;
+            case ConsoleKey.Delete:
+                if (cursor < buffer.Length)
+                    buffer.Remove(cursor, 1);
+                break;
+            default:
+                if (!char.IsControl(key.KeyChar))
+                    buffer.Insert(cursor++, key.KeyChar);
+                break;
+        }
+        _session.NoteCursor = cursor;
     }
 
     private void DispatchKey(ConsoleKeyInfo key)
@@ -517,7 +577,7 @@ internal sealed class PunchController
         _session.LogScrollOffset = Math.Clamp(_session.LogScrollOffset, 0, maxOff);
     }
 
-    private void Save() => PunchStorage.Save(_session.WorkingDate, Schedule.Blocks);
+    private void Save() => PunchStorage.Save(_session.WorkingDate, Schedule.Blocks, _session.Note);
 
     private void Render(LiveDisplayContext ctx)
     {

@@ -61,6 +61,90 @@ public class PunchControllerTests : IDisposable
     private static void SelectByLeftArrow(PunchController controller) =>
         controller.HandleKey(Key(ConsoleKey.LeftArrow));
 
+    [Fact]
+    public void DayNote_SaveReplaceClearAndKeepWhenBooking()
+    {
+        var (controller, session) = Create();
+        controller.HandleKey(Key(ConsoleKey.N, ctrl: true));
+        Type(controller, "Day [note]");
+        controller.HandleKey(Key(ConsoleKey.Enter));
+        Assert.False(session.EditingNote);
+        Assert.Equal("Day [note]", session.Note);
+        Assert.Empty(PunchStorage.Load(Date, out var note));
+        Assert.Equal(session.Note, note);
+
+        Type(controller, "Work");
+        controller.HandleKey(Key(ConsoleKey.Enter));
+        Assert.Single(PunchStorage.Load(Date, out note));
+        Assert.Equal("Day [note]", note);
+
+        controller.HandleKey(Key(ConsoleKey.F6));
+        controller.HandleKey(Key(ConsoleKey.Home));
+        controller.HandleKey(Key(ConsoleKey.Delete));
+        controller.HandleKey(Key(ConsoleKey.End));
+        controller.HandleKey(Key(ConsoleKey.Backspace));
+        controller.HandleKey(Key(ConsoleKey.Enter));
+        Assert.Equal("ay [note", session.Note);
+
+        controller.HandleKey(Key(ConsoleKey.F6));
+        while (session.NoteCursor > 0)
+            controller.HandleKey(Key(ConsoleKey.Backspace));
+        controller.HandleKey(Key(ConsoleKey.Enter));
+        PunchStorage.Load(Date, out note);
+        Assert.Equal("", note);
+    }
+
+    [Theory]
+    [InlineData(ConsoleKey.F6, false)]
+    [InlineData(ConsoleKey.N, true)]
+    [InlineData(ConsoleKey.Escape, false)]
+    public void DayNote_ToggleClosesWithoutSavingAndReopensSavedNote(ConsoleKey closeKey, bool ctrl)
+    {
+        var (controller, session) = Create();
+        controller.HandleKey(Key(ConsoleKey.F6));
+        Type(controller, "Saved note");
+        controller.HandleKey(Key(ConsoleKey.Enter));
+        Assert.False(session.EditingNote);
+
+        controller.HandleKey(Key(ConsoleKey.N, ctrl: true));
+        Assert.True(session.EditingNote);
+        Assert.Equal("Saved note", session.NoteBuffer.ToString());
+        Type(controller, " unsaved");
+        controller.HandleKey(Key(closeKey, ctrl: ctrl));
+
+        Assert.False(session.EditingNote);
+        Assert.Equal("Saved note", session.Note);
+        PunchStorage.Load(Date, out var note);
+        Assert.Equal("Saved note", note);
+
+        controller.HandleKey(Key(ConsoleKey.F6));
+        Assert.True(session.EditingNote);
+        Assert.Equal("Saved note", session.NoteBuffer.ToString());
+        Assert.Equal(session.NoteBuffer.Length, session.NoteCursor);
+    }
+
+    [Fact]
+    public void DayNote_CancelPreservesNoteAndBlockEdit()
+    {
+        var (controller, session) = Create(36, 40, new TimeBlock(32, 4, "Work"));
+        session.Note = "Original";
+        SelectByLeftArrow(controller);
+        controller.HandleKey(Key(ConsoleKey.E, ctrl: true));
+        controller.HandleKey(Key(ConsoleKey.F6));
+        Type(controller, " draft");
+        controller.HandleKey(Key(ConsoleKey.UpArrow));
+        controller.HandleKey(Key(ConsoleKey.D, ctrl: true));
+        controller.HandleKey(Key(ConsoleKey.Tab));
+        controller.HandleKey(Key(ConsoleKey.Escape));
+
+        Assert.Equal("Original", session.Note);
+        Assert.True(session.Editing);
+        Assert.Equal("Work", session.InputBuffer.ToString());
+        Assert.Equal(4, session.SelectionLength);
+        Assert.False(controller.IsConfirmingDelete);
+        Assert.False(File.Exists(PunchStorage.GetFilePath(Date)));
+    }
+
     // --- Text input / booking ---
 
     [Fact]

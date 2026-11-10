@@ -49,9 +49,10 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
 
         var filePath = PunchStorage.GetDisplayPath(workingDate);
         DaySchedule schedule;
+        string note;
         try
         {
-            schedule = new DaySchedule(PunchStorage.Load(workingDate));
+            schedule = new DaySchedule(PunchStorage.Load(workingDate, out note));
         }
         catch (Exception ex)
         {
@@ -72,7 +73,10 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
         var themes = appSettings.CreateThemes();
         var session = new PunchSession(schedule, workingDate, filePath, cursorSlot,
             appSettings.GetTargetHours(workingDate.DayOfWeek), appSettings.CreateNonBillableMatcher(),
-            themes, ThemeCatalog.IndexOf(themes, PunchStorage.LoadState().Theme));
+            themes, ThemeCatalog.IndexOf(themes, PunchStorage.LoadState().Theme))
+        {
+            Note = note
+        };
 
         AnsiConsole.AlternateScreen(() =>
         {

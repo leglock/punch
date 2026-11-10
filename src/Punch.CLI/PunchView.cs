@@ -311,7 +311,8 @@ internal sealed class PunchView
             "[bold]?[/]           Toggle this help\n" +
             "[bold]F3, Ctrl+T[/]   Ticket summary\n" +
             "[bold]F4, Ctrl+P[/]   Pick ticket for entry\n" +
-            "[bold]F5, Ctrl+R[/]   Cycle color theme");
+            "[bold]F5, Ctrl+R[/]   Cycle color theme\n" +
+            "[bold]F6, Ctrl+N[/]   Toggle day note (Enter save, Esc cancel)");
         var helpContent = new Rows(
             titleLine,
             new Text(" "),
@@ -487,6 +488,22 @@ internal sealed class PunchView
                     .Expand()
                     .Border(BoxBorder.Rounded));
         }
+        else if (session.EditingNote)
+        {
+            // No field label or hint row: both interior rows are available for
+            // the note to wrap, unlike the description/ticket input pair.
+            var text = session.NoteBuffer.ToString();
+            var cursor = session.NoteCursor;
+            var before = Markup.Escape(text[..cursor]);
+            var current = cursor < text.Length ? Markup.Escape(text[cursor].ToString()) : " ";
+            var after = cursor < text.Length ? Markup.Escape(text[(cursor + 1)..]) : "";
+            _layout["Input"].Update(
+                new Panel(new Markup($"{before}[invert]{current}[/]{after}"))
+                    .Header("Day Note")
+                    .Expand()
+                    .Border(BoxBorder.Rounded)
+                    .BorderStyle(Style.Parse(theme.Highlight)));
+        }
         else if (selectedBlock != null && editing)
         {
             var descLine = RenderFieldLine("Description", session.InputBuffer, session.InputCursor, session.ActiveField == 0);
@@ -528,7 +545,7 @@ internal sealed class PunchView
         var filePath = session.FilePath;
         var totalMinutesAll = session.Blocks.Where(b => !session.IsNonBillable(b)).Sum(b => b.Length * 15);
         var totalFormatted = Duration.HumanizeTotal(totalMinutesAll);
-        var statusLeftPlain = $"  {filePath}  ?=help F3=summary F4=tickets";
+        var statusLeftPlain = $"  {filePath}  ?=help F3=summary F4=tickets F6=note";
         string statusRightPlain;
         string statusRightMarkup;
         if (session.TargetHours > 0)
@@ -556,7 +573,7 @@ internal sealed class PunchView
             statusRightMarkup = $"[bold {theme.StatusBarText}]{Markup.Escape(statusRightPlain)}[/]";
         }
         var padding = Math.Max(0, consoleWidth - statusLeftPlain.Length - statusRightPlain.Length);
-        var statusBar = $"[{theme.StatusBarText} on {theme.StatusBarBackground}]  {Markup.Escape(filePath)}  [bold {theme.StatusBarAccent}]?=help F3=summary F4=tickets[/]{new string(' ', padding)}{statusRightMarkup}[/]";
+        var statusBar = $"[{theme.StatusBarText} on {theme.StatusBarBackground}]  {Markup.Escape(filePath)}  [bold {theme.StatusBarAccent}]?=help F3=summary F4=tickets F6=note[/]{new string(' ', padding)}{statusRightMarkup}[/]";
         _layout["StatusBar"].Update(new Markup(statusBar));
     }
 

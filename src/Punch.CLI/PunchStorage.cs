@@ -153,8 +153,11 @@ internal static class PunchStorage
         }
     }
 
-    public static List<TimeBlock> Load(DateOnly date)
+    public static List<TimeBlock> Load(DateOnly date) => Load(date, out _);
+
+    public static List<TimeBlock> Load(DateOnly date, out string note)
     {
+        note = "";
         var path = GetFilePath(date);
         if (!File.Exists(path))
             return new List<TimeBlock>();
@@ -163,6 +166,7 @@ internal static class PunchStorage
         {
             var json = File.ReadAllText(path);
             var data = JsonSerializer.Deserialize<PunchData>(json);
+            note = data?.Note ?? "";
             if (data?.Blocks == null)
                 return new List<TimeBlock>();
 
@@ -202,13 +206,17 @@ internal static class PunchStorage
         }
     }
 
-    public static void Save(DateOnly date, IReadOnlyList<TimeBlock> blocks)
+    public static void Save(DateOnly date, IReadOnlyList<TimeBlock> blocks, string? note = null)
     {
+        // Block-only callers must not erase a saved day note.
+        if (note == null)
+            Load(date, out note);
         var dir = GetDataDirectory();
         Directory.CreateDirectory(dir);
 
         var data = new PunchData
         {
+            Note = note,
             Blocks = blocks.Select(b => new TimeBlockDto
             {
                 StartSlot = b.StartSlot,

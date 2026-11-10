@@ -26,6 +26,45 @@ public class PunchStorageTests : IDisposable
     }
 
     [Fact]
+    public void Note_RoundTripsWithoutBlocksAndCanBeReplacedOrCleared()
+    {
+        var date = new DateOnly(2026, 5, 4);
+        PunchStorage.Save(date, new List<TimeBlock>(), "Review [draft] — café");
+        Assert.Empty(PunchStorage.Load(date, out var note));
+        Assert.Equal("Review [draft] — café", note);
+
+        PunchStorage.Save(date, new List<TimeBlock>(), "Replacement");
+        PunchStorage.Load(date, out note);
+        Assert.Equal("Replacement", note);
+
+        PunchStorage.Save(date, new List<TimeBlock>(), "");
+        PunchStorage.Load(date, out note);
+        Assert.Equal("", note);
+    }
+
+    [Fact]
+    public void BlockOnlySave_PreservesNote()
+    {
+        var date = new DateOnly(2026, 5, 4);
+        PunchStorage.Save(date, new List<TimeBlock>(), "Keep me");
+        PunchStorage.Save(date, new List<TimeBlock> { new(32, 4, "Work") });
+        Assert.Single(PunchStorage.Load(date, out var note));
+        Assert.Equal("Keep me", note);
+    }
+
+    [Theory]
+    [InlineData("{ \"Blocks\": [] }")]
+    [InlineData("{ \"Blocks\": [], \"Note\": null }")]
+    [InlineData("null")]
+    public void Load_MissingOrNullNoteDefaultsToEmpty(string json)
+    {
+        var date = new DateOnly(2026, 5, 4);
+        File.WriteAllText(PunchStorage.GetFilePath(date), json);
+        PunchStorage.Load(date, out var note);
+        Assert.Equal("", note);
+    }
+
+    [Fact]
     public void GetFilePath_FormatsDateAsIsoYmd()
     {
         var path = PunchStorage.GetFilePath(new DateOnly(2026, 5, 4));

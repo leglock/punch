@@ -57,6 +57,12 @@ internal sealed class PunchSession
     public TimeBlock? SelectedBlock { get; set; }
     public bool Editing { get; set; }
 
+    // Draft note edits leave the saved note and block input untouched.
+    public string Note { get; set; } = "";
+    public bool EditingNote { get; set; }
+    public StringBuilder NoteBuffer { get; } = new();
+    public int NoteCursor { get; set; }
+
     // View toggles.
     public bool ShowHelp { get; set; }
     public bool ShowTicketSummary { get; set; }

@@ -63,6 +63,7 @@ the entry. Navigating onto an existing entry selects it for editing or deletion.
 | F3 / Ctrl+T  | Ticket summary                      |
 | F4 / Ctrl+P  | Pick a ticket                       |
 | F5 / Ctrl+R  | Cycle color theme                   |
+| F6 / Ctrl+N  | Toggle the day's note editor         |
 | ?            | Toggle help                         |
 | Ctrl+Q, Q    | Quit                                |
 
@@ -70,6 +71,13 @@ the entry. Navigating onto an existing entry selects it for editing or deletion.
 
 Entries are saved automatically to `~/.punch/data/yyyy-MM-dd.json` — one file
 per day — on every add, edit, and delete.
+
+Each day can also have one note, independent of its time entries. Press **F6**
+(or **Ctrl+N**) to open the editor in the bottom input area. **Enter** saves and
+closes it; **Esc**, **F6**, or **Ctrl+N** closes it without saving draft changes.
+Saving an empty note clears it. The saved note is stored as a single `Note`
+string in that day's JSON file, even if no time is logged, and is available
+when you reopen the editor.
 
 To populate the ticket picker (F4), maintain a `~/.punch/tickets.txt` file with
 one ticket per line as `ticket,title` (tab or comma separated). Blank lines and

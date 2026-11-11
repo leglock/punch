@@ -545,7 +545,9 @@ internal sealed class PunchView
         var filePath = session.FilePath;
         var totalMinutesAll = session.Blocks.Where(b => !session.IsNonBillable(b)).Sum(b => b.Length * 15);
         var totalFormatted = Duration.HumanizeTotal(totalMinutesAll);
-        var statusLeftPlain = $"  {filePath}  ?=help F3=summary F4=tickets F6=note";
+        var noteHint = string.IsNullOrWhiteSpace(session.Note) ? "F6=note" : "F6=note 📄";
+        var keyHints = $"?=help F3=summary F4=tickets {noteHint}";
+        var statusLeftPlain = $"  {filePath}  {keyHints}";
         string statusRightPlain;
         string statusRightMarkup;
         if (session.TargetHours > 0)
@@ -573,7 +575,7 @@ internal sealed class PunchView
             statusRightMarkup = $"[bold {theme.StatusBarText}]{Markup.Escape(statusRightPlain)}[/]";
         }
         var padding = Math.Max(0, consoleWidth - statusLeftPlain.Length - statusRightPlain.Length);
-        var statusBar = $"[{theme.StatusBarText} on {theme.StatusBarBackground}]  {Markup.Escape(filePath)}  [bold {theme.StatusBarAccent}]?=help F3=summary F4=tickets F6=note[/]{new string(' ', padding)}{statusRightMarkup}[/]";
+        var statusBar = $"[{theme.StatusBarText} on {theme.StatusBarBackground}]  {Markup.Escape(filePath)}  [bold {theme.StatusBarAccent}]{keyHints}[/]{new string(' ', padding)}{statusRightMarkup}[/]";
         _layout["StatusBar"].Update(new Markup(statusBar));
     }
 

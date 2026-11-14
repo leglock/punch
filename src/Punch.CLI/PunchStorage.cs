@@ -174,7 +174,7 @@ internal static class PunchStorage
             var occupied = new bool[96];
             foreach (var dto in data.Blocks)
             {
-                if (dto.StartSlot < 0 || dto.StartSlot >= 96 || dto.Length < 1 || dto.StartSlot + dto.Length > 96)
+                if (dto.StartSlot < 0 || dto.StartSlot >= 96 || dto.Length < 1 || dto.Length > 96 - dto.StartSlot)
                     continue;
 
                 var overlaps = false;

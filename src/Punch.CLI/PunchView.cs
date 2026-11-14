@@ -306,6 +306,7 @@ internal sealed class PunchView
             "[bold]Enter[/]       Log time entry\n" +
             "[bold]Tab[/]         Switch input field\n" +
             "[bold]Ctrl+E[/]      Edit selected entry\n" +
+            "[bold]Esc[/]         Cancel entry edit (restore original)\n" +
             "[bold]Ctrl+D[/]      Delete selected entry\n" +
             "[bold]Ctrl+Q, Q[/]   Quit\n" +
             "[bold]?[/]           Toggle this help\n" +

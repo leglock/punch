@@ -18,6 +18,7 @@ A TUI time tracker for your workday. Log, label, and export your hours without l
 - Label each entry with a description and an optional ticket number
 - Pick a ticket from a list (F4) maintained in `~/.punch/tickets.txt`, plus any ticket already used that day
 - Edit, move, and resize existing entries in place
+- Optional weekday templates for recurring meetings on new timesheets
 - Running workday total in the status bar, with non-billable blocks (lunch and breaks by default, configurable) excluded
 - Ticket summary view (F3) totalling time per ticket, with billable/unbillable subtotals
 - Scrollable time log for busy days
@@ -132,6 +133,63 @@ apply; an empty list `[]` disables the exclusion entirely.
   ]
 }
 ```
+
+### Weekday templates
+
+Add optional `dayTemplates` to `~/.punch/settings.json` to start new timesheets
+with recurring entries:
+
+```json
+{
+  "targetHours": 8,
+  "dayTemplates": {
+    "monday": [
+      { "label": "Daily standup", "ticket": "TEAM-123", "start": "09:00", "end": "09:15" },
+      { "label": "Weekly planning", "start": "10:00", "end": "11:00" }
+    ],
+    "tuesday": [
+      { "label": "Daily standup", "ticket": "TEAM-123", "start": "09:00", "end": "09:15" }
+    ],
+    "friday": [
+      { "label": "Weekly review", "start": "15:00", "end": "15:30" }
+    ],
+    "saturday": [],
+    "sunday": []
+  }
+}
+```
+
+- Use full weekday names (Monday through Sunday); weekday and entry property
+  names are case-insensitive. Missing/null templates or missing/null/empty
+  weekday lists add nothing. Repeat daily meetings in each applicable list;
+  there is no shared/default-day template.
+- `label` is the required, nonblank Description, **not** the day note; outer
+  whitespace is trimmed. `ticket` is optional (missing/null means empty),
+  trimmed and uppercased; it need not exist in `tickets.txt`.
+- Both times must use exact 24-hour `HH:mm`, on 15-minute boundaries.
+  Start: `00:00`–`23:45`; end: `00:15`–`24:00`, strictly after start.
+  `24:00` is end-only. Overnight ranges and rounding are not supported.
+- Invalid entries are skipped without discarding valid siblings. Entries are
+  processed in configuration order: the first accepted entry wins overlaps
+  and duplicates; adjacent entries are allowed. Warnings appear in the time log
+  (PgUp/PgDn to scroll) and are not saved as notes or entries.
+
+**Templates initialize only dates whose daily JSON file does not exist.**
+Accepted entries are saved immediately, before the editor opens. The weekday
+comes from the opened date, including `--date` and `--yesterday`, independently
+of daily target hours (even a zero-hour target).
+
+This is not synchronization: generated entries are ordinary logged blocks.
+Edit, move, resize, reticket, or delete them normally; those changes survive
+reopening. They count toward totals and ticket summaries under the existing
+non-billable label rules.
+
+Existing logs—including empty, note-only, or corrupt files—never receive
+template merges. **Deleting all blocks does not reset templates.** Configuration
+changes affect only new timesheets. Manually deleting a daily file makes that
+date eligible for initialization again. If no entries are accepted, no file is
+created, so fixing the configuration allows another attempt on next startup.
+Settings are never rewritten by this feature.
 
 ### Color themes
 

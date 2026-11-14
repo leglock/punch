@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Text.Json;
 
 namespace Punch.CLI;
 
@@ -15,6 +16,9 @@ internal sealed class PunchSettings
     // case-insensitive). Days not listed fall back to TargetHours. A value of 0
     // marks a day off (the status bar then omits the percentage).
     public Dictionary<string, decimal>? TargetHoursByDay { get; set; }
+
+    // Parse templates separately so malformed entries cannot reset other settings.
+    public JsonElement? DayTemplates { get; set; }
 
     // Targets are booked in quarter-hour slots, so only multiples of 0.25 are
     // valid; anything else falls back.

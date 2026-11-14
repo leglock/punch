@@ -263,6 +263,36 @@ public class LoadSettingsTests : IDisposable
         Assert.Equal("#FFFFFF", dusk.Logo[4]);
     }
 
+    [Theory]
+    [InlineData("42")]
+    [InlineData("[]")]
+    [InlineData("\"invalid\"")]
+    [InlineData("""{"monday":false}""")]
+    [InlineData("""{"monday":[null,{"label":42},{"label":"Valid","start":"09:00","end":"09:15"}]}""")]
+    public void MalformedTemplates_DoNotResetUnrelatedSettings(string templates)
+    {
+        var json = $$$"""
+            {
+              "TARGETHOURS": 6,
+              "targetHoursByDay": {"friday": 0},
+              "nonBillable": [{"word":"meeting"}],
+              "themes": {"custom":{"ticket":"#123456"}},
+              "DAYTEMPLATES": {{{templates}}}
+            }
+            """;
+        File.WriteAllText(_settingsPath, json);
+        var settings = PunchStorage.LoadSettings();
+        Assert.Equal(6, settings.TargetHours);
+        Assert.Equal(0, settings.GetTargetHours(DayOfWeek.Friday));
+        Assert.True(settings.CreateNonBillableMatcher().IsNonBillable("Meeting"));
+        Assert.Equal("custom", settings.CreateThemes()[^1].Name);
+        var result = DayTemplateResolver.Resolve(settings.DayTemplates, DayOfWeek.Monday);
+        Assert.NotEmpty(result.Warnings);
+        if (templates.Contains("Valid"))
+            Assert.Equal("Valid", Assert.Single(result.Schedule.Blocks).Label);
+        Assert.Equal(json, File.ReadAllText(_settingsPath));
+    }
+
     [Fact]
     public void State_EmptyWhenFileMissing()
     {

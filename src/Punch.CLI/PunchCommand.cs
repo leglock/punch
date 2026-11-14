@@ -48,34 +48,30 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
         }
 
         var filePath = PunchStorage.GetDisplayPath(workingDate);
-        DaySchedule schedule;
-        string note;
+        TimesheetInitialization initialized;
+        PunchSettings appSettings;
         try
         {
-            schedule = new DaySchedule(PunchStorage.Load(workingDate, out note));
+            appSettings = PunchStorage.LoadSettings();
+            initialized = TimesheetInitializer.Initialize(workingDate, appSettings);
         }
         catch (Exception ex)
         {
-            _console.MarkupLine($"[bold red]Error:[/] Failed to load time log from [bold cyan]{Markup.Escape(filePath)}[/].");
+            _console.MarkupLine($"[bold red]Error:[/] Failed to load time log or initialize templates at [bold cyan]{Markup.Escape(filePath)}[/].");
             _console.MarkupLine($"[bold yellow]Reason:[/] {Markup.Escape(ex.Message)}");
             return 1;
         }
 
-        var cursorSlot = 34; // default to 8:30am
-        if (schedule.Count > 0)
-        {
-            var lastEnd = schedule.Blocks.Max(b => b.StartSlot + b.Length);
-            if (lastEnd < 96)
-                cursorSlot = lastEnd;
-        }
-
-        var appSettings = PunchStorage.LoadSettings();
+        var (cursorSlot, selectionLength, selectedBlock) = initialized.GetInitialSelection();
         var themes = appSettings.CreateThemes();
-        var session = new PunchSession(schedule, workingDate, filePath, cursorSlot,
+        var session = new PunchSession(initialized.Schedule, workingDate, filePath, cursorSlot,
             appSettings.GetTargetHours(workingDate.DayOfWeek), appSettings.CreateNonBillableMatcher(),
             themes, ThemeCatalog.IndexOf(themes, PunchStorage.LoadState().Theme))
         {
-            Note = note
+            Note = initialized.Note,
+            StartupWarnings = initialized.Warnings,
+            SelectionLength = selectionLength,
+            SelectedBlock = selectedBlock
         };
 
         AnsiConsole.AlternateScreen(() =>

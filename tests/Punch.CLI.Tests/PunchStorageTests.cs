@@ -122,6 +122,39 @@ public class PunchStorageTests : IDisposable
         Assert.Equal(32, valid.StartSlot);
     }
 
+    [Theory]
+    [InlineData(0, int.MaxValue)]
+    [InlineData(1, int.MaxValue)]
+    [InlineData(50, int.MaxValue)]
+    [InlineData(95, int.MaxValue)]
+    [InlineData(50, 2147483000)]
+    public void Load_SkipsBlocksWithExcessiveLength(int startSlot, int length)
+    {
+        var date = new DateOnly(2026, 5, 4);
+        var valid = new TimeBlock(startSlot, 1, "Valid");
+        var json = JsonSerializer.Serialize(new
+        {
+            Blocks = new[] { new TimeBlock(startSlot, length, "Invalid"), valid }
+        });
+        File.WriteAllText(PunchStorage.GetFilePath(date), json);
+
+        Assert.Equal(valid, Assert.Single(PunchStorage.Load(date)));
+    }
+
+    [Theory]
+    [InlineData(0, 96)]
+    [InlineData(50, 46)]
+    [InlineData(95, 1)]
+    public void Load_AcceptsBlocksEndingAtDayBoundary(int startSlot, int length)
+    {
+        var date = new DateOnly(2026, 5, 4);
+        var block = new TimeBlock(startSlot, length, "Valid");
+        var json = JsonSerializer.Serialize(new { Blocks = new[] { block } });
+        File.WriteAllText(PunchStorage.GetFilePath(date), json);
+
+        Assert.Equal(block, Assert.Single(PunchStorage.Load(date)));
+    }
+
     [Fact]
     public void Load_SkipsOverlappingBlocks()
     {

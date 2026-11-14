@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Text.Json;
 using Punch.CLI;
+using Spectre.Console;
 using Xunit;
 
 namespace Punch.CLI.Tests;
@@ -271,6 +273,27 @@ public class PunchStorageTests : IDisposable
 
         var only = Assert.Single(PunchStorage.Load(date));
         Assert.Equal("", only.Ticket);
+    }
+
+    [Theory]
+    [InlineData(null, null)]
+    [InlineData(null, "ABC-1")]
+    [InlineData("Work", null)]
+    public void Load_NormalizesExplicitNullLabelAndTicket(string? label, string? ticket)
+    {
+        var date = new DateOnly(2026, 5, 4);
+        var json = JsonSerializer.Serialize(new
+        {
+            Blocks = new[] { new { StartSlot = 32, Length = 4, Label = label, Ticket = ticket } }
+        });
+        File.WriteAllText(PunchStorage.GetFilePath(date), json);
+
+        var block = Assert.Single(PunchStorage.Load(date));
+
+        Assert.Equal(new TimeBlock(32, 4, label ?? "", ticket ?? ""), block);
+        Assert.Equal(label ?? "", Markup.Escape(block.Label));
+        Assert.Equal(ticket ?? "", Markup.Escape(block.Ticket));
+        Assert.False(NonBillableMatcher.Default.IsNonBillable(block.Label));
     }
 
     [Fact]

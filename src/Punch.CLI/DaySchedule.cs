@@ -73,7 +73,7 @@ internal sealed class DaySchedule
     public void FillSlots(TimeBlock block) => SetOccupied(block, true);
 
     // Finds where the cursor should land after booking a block at cursorSlot:
-    // the next free slot, or slot 95 (selecting the block there) when the day is full.
+    // the next free slot, or the start of the final block when no later slot is free.
     public (int cursorSlot, int selectionLength, TimeBlock? selectedBlock) AdvanceAfterAdd(int cursorSlot)
     {
         var selectionLength = 1;
@@ -89,6 +89,7 @@ internal sealed class DaySchedule
                 var adj = FindAt(95);
                 if (adj != null)
                 {
+                    cursorSlot = adj.StartSlot;
                     selectionLength = adj.Length;
                     selectedBlock = adj;
                 }

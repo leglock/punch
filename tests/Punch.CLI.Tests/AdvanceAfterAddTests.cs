@@ -34,7 +34,7 @@ public class AdvanceAfterAddTests
     }
 
     [Fact]
-    public void FallsBackToSlot95WhenDayIsFull_SelectsExistingBlock()
+    public void SelectsFinalBlockWhenNoLaterSlotIsFree()
     {
         var existingBlock = new TimeBlock(92, 4, "last-block", "TICKET");
         var schedule = new DaySchedule(new[]
@@ -45,9 +45,28 @@ public class AdvanceAfterAddTests
 
         var (cursorSlot, selectionLength, selectedBlock) = schedule.AdvanceAfterAdd(90);
 
-        Assert.Equal(95, cursorSlot);
+        Assert.Equal(existingBlock.StartSlot, cursorSlot);
         Assert.Equal(existingBlock.Length, selectionLength);
         Assert.Same(existingBlock, selectedBlock);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(32)]
+    [InlineData(95)]
+    public void FullDay_SelectsFinalBlockAtItsStart(int finalBlockStart)
+    {
+        var finalBlock = new TimeBlock(finalBlockStart, 96 - finalBlockStart, "last-block");
+        var schedule = new DaySchedule(finalBlockStart == 0
+            ? new[] { finalBlock }
+            : new[] { new TimeBlock(0, finalBlockStart, "earlier"), finalBlock });
+
+        var (cursorSlot, selectionLength, selectedBlock) = schedule.AdvanceAfterAdd(0);
+
+        Assert.Same(finalBlock, selectedBlock);
+        Assert.Equal(finalBlock.StartSlot, cursorSlot);
+        Assert.Equal(finalBlock.Length, selectionLength);
+        Assert.Equal(96, cursorSlot + selectionLength);
     }
 
     [Fact]

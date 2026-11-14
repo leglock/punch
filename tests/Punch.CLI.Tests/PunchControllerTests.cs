@@ -295,9 +295,11 @@ public class PunchControllerTests : IDisposable
 
         controller.HandleKey(Key(ConsoleKey.Enter));
 
-        Assert.Equal(95, session.CursorSlot);
-        Assert.NotNull(session.SelectedBlock);
-        Assert.Equal(4, session.SelectionLength);
+        var block = Assert.Single(session.Blocks);
+        Assert.Same(block, session.SelectedBlock);
+        Assert.Equal(block.StartSlot, session.CursorSlot);
+        Assert.Equal(block.Length, session.SelectionLength);
+        Assert.Equal(96, session.CursorSlot + session.SelectionLength);
     }
 
     // --- Arrows / selection ---

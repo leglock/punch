@@ -187,7 +187,7 @@ internal static class PunchStorage
                 for (var s = dto.StartSlot; s < dto.StartSlot + dto.Length; s++)
                     occupied[s] = true;
 
-                result.Add(new TimeBlock(dto.StartSlot, dto.Length, dto.Label, dto.Ticket));
+                result.Add(new TimeBlock(dto.StartSlot, dto.Length, dto.Label ?? "", dto.Ticket ?? ""));
             }
             return result;
         }

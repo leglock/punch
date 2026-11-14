@@ -196,7 +196,19 @@ internal static class PunchStorage
             var backupPath = path + ".bak";
             try
             {
-                File.Copy(path, backupPath, overwrite: true);
+                for (var suffix = 1; ; suffix++)
+                {
+                    try
+                    {
+                        File.Copy(path, backupPath, overwrite: false);
+                        break;
+                    }
+                    catch (IOException) when (File.Exists(backupPath))
+                    {
+                        // Retry collisions without ever replacing an earlier backup.
+                        backupPath = $"{path}.bak.{suffix}";
+                    }
+                }
             }
             catch (Exception backupEx)
             {

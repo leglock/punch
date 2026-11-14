@@ -894,6 +894,111 @@ public class PunchControllerTests : IDisposable
         Assert.Equal(original, Assert.Single(session.Blocks));
     }
 
+    [Theory]
+    [InlineData(ConsoleKey.LeftArrow, ConsoleKey.UpArrow, false)]
+    [InlineData(ConsoleKey.RightArrow, ConsoleKey.DownArrow, false)]
+    [InlineData(ConsoleKey.LeftArrow, ConsoleKey.DownArrow, true)]
+    [InlineData(ConsoleKey.RightArrow, ConsoleKey.UpArrow, true)]
+    public void Escape_DuringEdit_RestoresOriginalBlockAndOccupancy(
+        ConsoleKey moveKey, ConsoleKey resizeKey, bool clearDescription)
+    {
+        var original = new TimeBlock(32, 4, "Work", "ABC-1");
+        var (controller, session) = Create(cursorSlot: 36, blocks: new[]
+        {
+            new TimeBlock(28, 2, "Before"), original, new TimeBlock(40, 2, "After")
+        });
+        PunchStorage.Save(Date, session.Blocks);
+        var path = PunchStorage.GetFilePath(Date);
+        var savedJson = File.ReadAllText(path);
+        SelectByLeftArrow(controller);
+        controller.HandleKey(Key(ConsoleKey.E, ctrl: true));
+        Type(controller, " draft");
+        if (clearDescription)
+            while (session.InputCursor > 0)
+                controller.HandleKey(Key(ConsoleKey.Backspace));
+        controller.HandleKey(Key(ConsoleKey.Tab));
+        Type(controller, "-DRAFT");
+        if (!clearDescription)
+            controller.HandleKey(Key(ConsoleKey.Tab));
+        controller.HandleKey(Key(moveKey, shift: true));
+        controller.HandleKey(Key(resizeKey, shift: true));
+        Assert.NotEqual(original.StartSlot, session.CursorSlot);
+        Assert.NotEqual(original.Length, session.SelectionLength);
+
+        Assert.False(controller.HandleKey(Key(ConsoleKey.Escape)));
+
+        Assert.False(session.Editing);
+        Assert.Same(original, session.SelectedBlock);
+        Assert.Equal(original.StartSlot, session.CursorSlot);
+        Assert.Equal(original.Length, session.SelectionLength);
+        Assert.Empty(session.InputBuffer.ToString());
+        Assert.Empty(session.TicketBuffer.ToString());
+        Assert.Equal(0, session.InputCursor);
+        Assert.Equal(0, session.TicketCursor);
+        Assert.Equal(0, session.ActiveField);
+        for (var slot = 0; slot < 96; slot++)
+        {
+            var occupied = session.Blocks.Any(b => slot >= b.StartSlot && slot < b.StartSlot + b.Length);
+            Assert.Equal(!occupied, session.Schedule.IsFree(slot));
+        }
+        Assert.Equal(savedJson, File.ReadAllText(path));
+        Assert.Equal(session.Blocks, PunchStorage.Load(Date));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Escape_OutsideEdit_DoesNotChangeSelectionOrDraft(bool selectBlock)
+    {
+        var (controller, session) = Create(cursorSlot: 36, blocks: new TimeBlock(32, 4, "Work"));
+        if (selectBlock)
+            SelectByLeftArrow(controller);
+        else
+        {
+            Type(controller, "Draft");
+            controller.HandleKey(Key(ConsoleKey.Tab));
+            Type(controller, "ABC-1");
+        }
+        var selected = session.SelectedBlock;
+        var cursor = session.CursorSlot;
+        var length = session.SelectionLength;
+        var description = session.InputBuffer.ToString();
+        var ticket = session.TicketBuffer.ToString();
+        var activeField = session.ActiveField;
+
+        controller.HandleKey(Key(ConsoleKey.Escape));
+
+        Assert.False(session.Editing);
+        Assert.Same(selected, session.SelectedBlock);
+        Assert.Equal(cursor, session.CursorSlot);
+        Assert.Equal(length, session.SelectionLength);
+        Assert.Equal(description, session.InputBuffer.ToString());
+        Assert.Equal(ticket, session.TicketBuffer.ToString());
+        Assert.Equal(activeField, session.ActiveField);
+        Assert.False(File.Exists(PunchStorage.GetFilePath(Date)));
+    }
+
+    [Fact]
+    public void Escape_WithSummaryOverEdit_ClosesSummaryBeforeCancellingEdit()
+    {
+        var (controller, session) = Create(cursorSlot: 36, blocks: new TimeBlock(32, 4, "Work"));
+        SelectByLeftArrow(controller);
+        controller.HandleKey(Key(ConsoleKey.E, ctrl: true));
+        controller.HandleKey(Key(ConsoleKey.F3));
+        Assert.True(session.ShowTicketSummary);
+
+        controller.HandleKey(Key(ConsoleKey.Escape));
+
+        Assert.False(session.ShowTicketSummary);
+        Assert.True(session.Editing);
+        Assert.True(session.Schedule.IsFree(32));
+
+        controller.HandleKey(Key(ConsoleKey.Escape));
+
+        Assert.False(session.Editing);
+        Assert.False(session.Schedule.IsFree(32));
+    }
+
     // --- Delete confirm (Ctrl+D) ---
 
     [Fact]

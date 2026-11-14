@@ -59,6 +59,7 @@ the entry. Navigating onto an existing entry selects it for editing or deletion.
 | Enter            | Log time entry                           |
 | Tab              | Switch input field                       |
 | Ctrl+E           | Edit selected entry                      |
+| Esc              | Cancel entry edit; restore original      |
 | Shift+Left/Right | Move entry earlier/later (while editing) |
 | Shift+Up/Down    | Grow/shrink entry (while editing)        |
 | Ctrl+D           | Delete selected entry                    |

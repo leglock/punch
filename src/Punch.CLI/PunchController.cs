@@ -263,6 +263,9 @@ internal sealed class PunchController
             case ConsoleKey.E when key.Modifiers.HasFlag(ConsoleModifiers.Control):
                 HandleEditStart();
                 break;
+            case ConsoleKey.Escape:
+                HandleEditCancel();
+                break;
             case ConsoleKey.Enter:
                 HandleEnter();
                 break;
@@ -447,7 +450,7 @@ internal sealed class PunchController
     {
         // Ctrl+E: edit the selected block's label, ticket, start, and length. Free
         // the block's slots so a live move/resize can reuse them; the abandon paths
-        // (Left/Right) re-fill them, and Enter re-derives occupancy via Replace.
+        // (Esc or Left/Right) re-fill them, and Enter re-derives occupancy via Replace.
         if (_session.SelectedBlock == null || _session.Editing)
             return;
 
@@ -463,6 +466,16 @@ internal sealed class PunchController
         _session.TicketBuffer.Append(block.Ticket);
         _session.TicketCursor = _session.TicketBuffer.Length;
         _session.ActiveField = 0;
+    }
+
+    private void HandleEditCancel()
+    {
+        if (!_session.Editing || _session.SelectedBlock == null)
+            return;
+
+        Schedule.FillSlots(_session.SelectedBlock);
+        SelectBlock(_session.SelectedBlock);
+        _session.ResetInput();
     }
 
     private void HandleEnter()

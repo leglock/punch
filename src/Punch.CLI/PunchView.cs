@@ -220,73 +220,60 @@ internal sealed class PunchView
             _layout["Messages"].Update(BuildLogPanel(session));
     }
 
-    private static IRenderable BuildLogPanel(PunchSession session)
+    internal static IRenderable BuildLogPanel(PunchSession session, int? consoleWidth = null, int? consoleHeight = null)
     {
         var selectedBlock = session.SelectedBlock;
         var theme = session.Theme;
         var sorted = session.Blocks.OrderBy(b => b.StartSlot).ToList();
+        var rows = new List<IRenderable>();
 
-        // Messages pane: show booked blocks sorted chronologically with scrolling
-        var consoleHeight = System.Console.WindowHeight;
-        var messagesHeight = Math.Max(1, consoleHeight - 10 - 2); // 10 = fixed panes (5+4+1), 2 = panel border
+        // Diagnostics share PgUp/PgDn with the log so every warning is reachable,
+        // including when all template entries were rejected. Start at warnings.
+        var split = session.ShowHelp || session.ShowTicketPicker || session.ShowTicketSummary;
+        var textWidth = Math.Max(1, (consoleWidth ?? System.Console.WindowWidth) / (split ? 2 : 1) - 4);
+        foreach (var warning in session.StartupWarnings)
+            rows.Add(new Markup($"[{theme.Highlight}]{Markup.Escape(Truncate("Warning: " + warning, textWidth))}[/]"));
 
-        // Clamp scroll offset to valid range and reserve lines for scroll indicators
-        var availableLines = messagesHeight;
-        var clampedOffset = Math.Clamp(session.LogScrollOffset, 0, Math.Max(0, sorted.Count - 1));
+        foreach (var b in sorted)
+        {
+            var timeRange = SlotTime.FormatRange(b.StartSlot, b.StartSlot + b.Length);
+            var escaped = Markup.Escape(b.Label);
+            var isSelected = selectedBlock != null && b.StartSlot == selectedBlock.StartSlot && b.Length == selectedBlock.Length;
+            var blockIdx = sorted.IndexOf(b);
+            var squareColor = isSelected
+                ? theme.SelectionBlock
+                : session.IsNonBillable(b)
+                    ? theme.BlockNonBillable
+                    : blockIdx % 2 == 0 ? theme.BlockPrimary : theme.BlockAlternate;
+            var durationText = Duration.Humanize(b.Length * 15);
+            var ticketDisplay = string.IsNullOrEmpty(b.Ticket) ? "" : $"[{theme.Ticket}]{Markup.Escape(b.Ticket)}[/] ";
+            rows.Add(new Markup($"[{squareColor}]■[/] [bold]{timeRange}[/] {ticketDisplay}{escaped} [{Muted}]{durationText}[/]"));
+        }
+        if (sorted.Count == 0)
+            rows.Add(new Markup($"[{Muted}]No entries yet. Select a time range and press Enter.[/]"));
 
-        var hasMoreAbove = clampedOffset > 0;
-        if (hasMoreAbove) availableLines--;
-
-        var hasMoreBelow = clampedOffset + availableLines < sorted.Count;
-        if (hasMoreBelow) availableLines--;
-
+        // Fixed panes (5+4+1) and panel border (2).
+        var availableLines = Math.Max(1, (consoleHeight ?? System.Console.WindowHeight) - 10 - 2);
+        var clampedOffset = Math.Clamp(session.LogScrollOffset, 0, Math.Max(0, rows.Count - 1));
+        if (clampedOffset > 0) availableLines--;
+        if (clampedOffset + availableLines < rows.Count) availableLines--;
         availableLines = Math.Max(1, availableLines);
-        // Re-clamp offset so we don't scroll past the end
-        var maxScrollOffset = Math.Max(0, sorted.Count - availableLines);
-        clampedOffset = Math.Min(clampedOffset, maxScrollOffset);
-        // Recalculate indicators after clamping
-        hasMoreAbove = clampedOffset > 0;
-        hasMoreBelow = clampedOffset + availableLines < sorted.Count;
+        clampedOffset = Math.Min(clampedOffset, Math.Max(0, rows.Count - availableLines));
 
-        var visibleBlocks = sorted.Skip(clampedOffset).Take(availableLines).ToList();
-
-        IRenderable messagesContent;
-        if (visibleBlocks.Count == 0)
-        {
-            messagesContent = new Markup($"[{Muted}]No entries yet. Select a time range and press Enter.[/]");
-        }
-        else
-        {
-            var renderables = new List<IRenderable>();
-            if (hasMoreAbove)
-                renderables.Add(new Markup($"[{Muted}]  ▲ {clampedOffset} more above (PgUp)[/]"));
-            foreach (var b in visibleBlocks)
-            {
-                var timeRange = SlotTime.FormatRange(b.StartSlot, b.StartSlot + b.Length);
-                var escaped = Markup.Escape(b.Label);
-                var isSelected = selectedBlock != null && b.StartSlot == selectedBlock.StartSlot && b.Length == selectedBlock.Length;
-                var blockIdx = sorted.IndexOf(b);
-                var squareColor = isSelected
-                    ? theme.SelectionBlock
-                    : session.IsNonBillable(b)
-                        ? theme.BlockNonBillable
-                        : blockIdx % 2 == 0 ? theme.BlockPrimary : theme.BlockAlternate;
-                var durationText = Duration.Humanize(b.Length * 15);
-                var ticketDisplay = string.IsNullOrEmpty(b.Ticket) ? "" : $"[{theme.Ticket}]{Markup.Escape(b.Ticket)}[/] ";
-                renderables.Add(new Markup($"[{squareColor}]■[/] [bold]{timeRange}[/] {ticketDisplay}{escaped} [{Muted}]{durationText}[/]"));
-            }
-            if (hasMoreBelow)
-            {
-                var belowCount = sorted.Count - clampedOffset - availableLines;
-                renderables.Add(new Markup($"[{Muted}]  ▼ {belowCount} more below (PgDn)[/]"));
-            }
-            messagesContent = new Rows(renderables);
-        }
+        var renderables = new List<IRenderable>();
+        if (clampedOffset > 0)
+            renderables.Add(new Markup($"[{Muted}]  ▲ {clampedOffset} more above (PgUp)[/]"));
+        renderables.AddRange(rows.Skip(clampedOffset).Take(availableLines));
+        var belowCount = rows.Count - clampedOffset - availableLines;
+        if (belowCount > 0)
+            renderables.Add(new Markup($"[{Muted}]  ▼ {belowCount} more below (PgDn)[/]"));
 
         var header = sorted.Count == 0
             ? "Time Logged"
             : $"Time Logged · {sorted.Count} {(sorted.Count == 1 ? "entry" : "entries")}";
-        return new Panel(messagesContent)
+        if (session.StartupWarnings.Count > 0)
+            header += $" · {session.StartupWarnings.Count} template warnings (PgUp/PgDn)";
+        return new Panel(new Rows(renderables))
             .Header(header)
             .Expand()
             .Border(BoxBorder.Rounded);

@@ -258,7 +258,7 @@ internal sealed class PunchController
                 _session.LogScrollOffset = Math.Max(0, _session.LogScrollOffset - 5);
                 break;
             case ConsoleKey.PageDown:
-                _session.LogScrollOffset = Math.Min(Math.Max(0, Schedule.Count - 1), _session.LogScrollOffset + 5);
+                _session.LogScrollOffset = Math.Min(Math.Max(0, _session.LogRowCount - 1), _session.LogScrollOffset + 5);
                 break;
             case ConsoleKey.E when key.Modifiers.HasFlag(ConsoleModifiers.Control):
                 HandleEditStart();
@@ -573,6 +573,8 @@ internal sealed class PunchController
         if (selIdx < 0)
             return;
 
+        selIdx += _session.StartupWarnings.Count;
+
         // When scrolled, the "more above" indicator takes 1 line.
         var visHeight = Math.Max(1, _windowHeight() - 10 - 2 - 1);
         if (selIdx < _session.LogScrollOffset)
@@ -586,7 +588,7 @@ internal sealed class PunchController
         // When scrolled down, the "▲ more above" indicator takes 1 line, so only
         // viewHeight-1 block rows are visible at the bottom.
         var viewHeight = Math.Max(1, _windowHeight() - 10 - 2);
-        var maxOff = Math.Max(0, Schedule.Count - (viewHeight - 1));
+        var maxOff = Math.Max(0, _session.LogRowCount - (viewHeight - 1));
         _session.LogScrollOffset = Math.Clamp(_session.LogScrollOffset, 0, maxOff);
     }
 

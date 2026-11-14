@@ -16,8 +16,9 @@ public class PunchCommandTests : IDisposable
     public PunchCommandTests()
     {
         _tempDir = Path.Combine(Path.GetTempPath(), "punch-cmd-tests-" + Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(_tempDir);
-        PunchStorage.DataDirectoryOverride = _tempDir;
+        var dataDir = Path.Combine(_tempDir, "data");
+        Directory.CreateDirectory(dataDir);
+        PunchStorage.DataDirectoryOverride = dataDir;
     }
 
     public void Dispose()
@@ -127,6 +128,29 @@ public class PunchCommandTests : IDisposable
     // stripped because the console wraps the long temp-dir path.
     private static string AllOutput(CommandAppResult result, string stdout) =>
         (stdout + result.Output).Replace("\r", "").Replace("\n", "");
+
+    [Theory]
+    [InlineData("--date")]
+    [InlineData("--yesterday")]
+    [InlineData("")]
+    public void TemplateSaveFailure_ReturnsOneWithoutEnteringTui(string option)
+    {
+        var date = option == "--date" ? new DateOnly(2026, 5, 4)
+            : DateOnly.FromDateTime(DateTime.Now).AddDays(option == "--yesterday" ? -1 : 0);
+        File.WriteAllText(PunchStorage.GetSettingsFilePath(), $$$"""
+            {"dayTemplates":{"{{{date.DayOfWeek}}}":[{"label":"Meeting","start":"09:00","end":"09:15"}]}}
+            """);
+        Directory.CreateDirectory(PunchStorage.GetFilePath(date) + ".tmp");
+        var args = option == "--date" ? new[] { option, "2026-05-04" }
+            : option == "" ? Array.Empty<string>() : new[] { option };
+
+        var (result, stdout, _) = RunCapturing(CreateApp(), args);
+
+        Assert.Equal(1, result.ExitCode);
+        Assert.Contains("Failed to save initial dayTemplates", AllOutput(result, stdout));
+        Assert.Contains("writable", AllOutput(result, stdout));
+        Assert.False(File.Exists(PunchStorage.GetFilePath(date)));
+    }
 
     [Fact]
     public void CorruptDataFile_ReturnsOneWithoutEnteringTui()

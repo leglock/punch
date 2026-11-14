@@ -68,6 +68,10 @@ internal sealed class PunchSession
     public bool ShowTicketSummary { get; set; }
     public int LogScrollOffset { get; set; }
 
+    // Startup diagnostics are visible log rows, never saved as user data.
+    public IReadOnlyList<string> StartupWarnings { get; init; } = [];
+    public int LogRowCount => StartupWarnings.Count + Math.Max(1, Schedule.Count);
+
     // Ticket picker overlay. Tickets is rebuilt each time the picker is opened
     // (TicketCatalog.Build over a fresh ~/.punch/tickets.txt read plus the day's
     // own blocks), so edits to the file are picked up without a restart. The

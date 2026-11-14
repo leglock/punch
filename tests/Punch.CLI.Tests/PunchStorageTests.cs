@@ -194,6 +194,47 @@ public class PunchStorageTests : IDisposable
     }
 
     [Fact]
+    public void Load_PreservesEachBackupOnRepeatedCorruption()
+    {
+        var date = new DateOnly(2026, 5, 4);
+        var path = PunchStorage.GetFilePath(date);
+        var corruptContents = new[] { "{ first corruption", "{ second corruption", "{ third corruption" };
+        var backupPaths = new[] { path + ".bak", path + ".bak.1", path + ".bak.2" };
+
+        for (var i = 0; i < corruptContents.Length; i++)
+        {
+            File.WriteAllText(path, corruptContents[i]);
+
+            var ex = Assert.Throws<InvalidOperationException>(() => PunchStorage.Load(date));
+
+            Assert.Contains($"'{backupPaths[i]}'", ex.Message);
+            Assert.IsType<JsonException>(ex.InnerException);
+            Assert.Equal(corruptContents[i], File.ReadAllText(path));
+            for (var j = 0; j <= i; j++)
+                Assert.Equal(corruptContents[j], File.ReadAllText(backupPaths[j]));
+        }
+    }
+
+    [Fact]
+    public void Load_SkipsExistingBackupNamesWithoutOverwriting()
+    {
+        var date = new DateOnly(2026, 5, 4);
+        var path = PunchStorage.GetFilePath(date);
+        File.WriteAllText(path + ".bak", "Original backup");
+        File.WriteAllText(path + ".bak.1", "Another backup");
+        const string corruptContent = "{ current corruption";
+        File.WriteAllText(path, corruptContent);
+
+        var ex = Assert.Throws<InvalidOperationException>(() => PunchStorage.Load(date));
+
+        Assert.Contains($"'{path}.bak.2'", ex.Message);
+        Assert.Equal("Original backup", File.ReadAllText(path + ".bak"));
+        Assert.Equal("Another backup", File.ReadAllText(path + ".bak.1"));
+        Assert.Equal(corruptContent, File.ReadAllText(path + ".bak.2"));
+        Assert.Equal(corruptContent, File.ReadAllText(path));
+    }
+
+    [Fact]
     public void SaveThenLoad_PreservesResizedLength()
     {
         var date = new DateOnly(2026, 5, 4);

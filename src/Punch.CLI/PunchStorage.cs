@@ -44,7 +44,8 @@ internal static class PunchStorage
 
     // Loads the tickets list: one ticket per line, tab- or comma-delimited into
     // "ticket<sep>title". Blank lines and '#' comments are skipped, as are rows
-    // with an empty ticket. Returns an empty list if the file is missing.
+    // with an empty ticket. Returns an empty list if the file is missing or
+    // unreadable (permissions, locked, ...).
     public static List<TicketEntry> LoadTickets()
     {
         var path = GetTicketsFilePath();
@@ -52,19 +53,28 @@ internal static class PunchStorage
             return new List<TicketEntry>();
 
         var result = new List<TicketEntry>();
-        foreach (var raw in File.ReadAllLines(path))
+        try
         {
-            var line = raw.Trim();
-            if (line.Length == 0 || line.StartsWith('#'))
-                continue;
+            foreach (var raw in File.ReadAllLines(path))
+            {
+                var line = raw.Trim();
+                if (line.Length == 0 || line.StartsWith('#'))
+                    continue;
 
-            var parts = line.Split(new[] { '\t', ',' }, 2);
-            var ticket = parts[0].Trim();
-            if (ticket.Length == 0)
-                continue;
+                var parts = line.Split(new[] { '\t', ',' }, 2);
+                var ticket = parts[0].Trim();
+                if (ticket.Length == 0)
+                    continue;
 
-            var title = parts.Length > 1 ? parts[1].Trim() : "";
-            result.Add(new TicketEntry(ticket, title));
+                var title = parts.Length > 1 ? parts[1].Trim() : "";
+                result.Add(new TicketEntry(ticket, title));
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // An unreadable tickets file degrades to an empty picker, same as a
+            // missing file, instead of crashing the session.
+            return new List<TicketEntry>();
         }
         return result;
     }
@@ -79,9 +89,9 @@ internal static class PunchStorage
     }
 
     // Loads user settings from settings.json. Returns defaults if the file is
-    // missing or cannot be parsed. TargetHours must be a positive 15-minute
-    // increment (0.25, 0.5, ...); invalid values fall back to the default so the
-    // workday percentage never divides by zero.
+    // missing, unreadable, or cannot be parsed. TargetHours must be a positive
+    // 15-minute increment (0.25, 0.5, ...); invalid values fall back to the
+    // default so the workday percentage never divides by zero.
     public static PunchSettings LoadSettings()
     {
         var path = GetSettingsFilePath();
@@ -97,8 +107,9 @@ internal static class PunchStorage
                 settings.TargetHours = 8;
             return settings;
         }
-        catch (JsonException)
+        catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException)
         {
+
             return new PunchSettings();
         }
     }
@@ -113,7 +124,7 @@ internal static class PunchStorage
     }
 
     // Loads UI state from state.json. Returns an empty state if the file is
-    // missing or cannot be parsed.
+    // missing, unreadable, or cannot be parsed.
     public static PunchState LoadState()
     {
         var path = GetStateFilePath();
@@ -125,7 +136,7 @@ internal static class PunchStorage
             return JsonSerializer.Deserialize<PunchState>(File.ReadAllText(path),
                 new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new PunchState();
         }
-        catch (JsonException)
+        catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException)
         {
             return new PunchState();
         }

@@ -96,4 +96,15 @@ public class LoadTicketsTests : IDisposable
         var entry = Assert.Single(PunchStorage.LoadTickets());
         Assert.Equal("ABC-9", entry.Ticket);
     }
+
+    [Fact]
+    public void LoadTickets_ReturnsEmptyWhenFileUnreadable()
+    {
+        File.WriteAllText(_ticketsPath, "ABC-1,First\n");
+        // Hold an exclusive lock so the read inside LoadTickets fails with an
+        // IO error on every platform (sharing violation on Windows, flock on Unix).
+        using var lockStream = new FileStream(_ticketsPath, FileMode.Open, FileAccess.Read, FileShare.None);
+
+        Assert.Empty(PunchStorage.LoadTickets());
+    }
 }

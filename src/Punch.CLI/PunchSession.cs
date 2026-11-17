@@ -70,6 +70,11 @@ internal sealed class PunchSession
 
     // Startup diagnostics are visible log rows, never saved as user data.
     public IReadOnlyList<string> StartupWarnings { get; init; } = [];
+
+    // The last persistence failure (disk full, permissions, ...), rendered in
+    // the status bar. Null while saves succeed; the in-memory schedule stays
+    // intact so the user can retry or quit gracefully.
+    public string? LastError { get; set; }
     public int LogRowCount => StartupWarnings.Count + Math.Max(1, Schedule.Count);
 
     // Ticket picker overlay. Tickets is rebuilt each time the picker is opened

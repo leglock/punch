@@ -286,6 +286,36 @@ public class PunchControllerTests : IDisposable
     }
 
     [Fact]
+    public void Save_WhenDataDirUnwritable_DoesNotThrowKeepsStateAndSetsLastError()
+    {
+        var (controller, session) = Create();
+
+        // Point the data dir at a path under a regular file: Directory.CreateDirectory
+        // inside Save then fails with an IOException on every platform.
+        var blocker = Path.Combine(_tempDir, "blocker");
+        File.WriteAllText(blocker, "not a directory");
+        PunchStorage.DataDirectoryOverride = Path.Combine(blocker, "data");
+
+        Type(controller, "standup");
+        var ex = Record.Exception(() => controller.HandleKey(Key(ConsoleKey.Enter)));
+
+        // The keypress must not throw; the block stays in memory and the
+        // failure is surfaced via LastError instead of crashing the TUI.
+        Assert.Null(ex);
+        Assert.Single(session.Blocks);
+        Assert.NotNull(session.LastError);
+
+        // A later successful save clears the error.
+        PunchStorage.DataDirectoryOverride = Path.Combine(_tempDir, "data2");
+        Type(controller, "more");
+        controller.HandleKey(Key(ConsoleKey.Enter));
+
+        Assert.Null(session.LastError);
+        Assert.Equal(2, session.Blocks.Count);
+        Assert.Equal(2, PunchStorage.Load(Date).Count);
+    }
+
+    [Fact]
     public void Enter_WhenBookingFillsEndOfDay_SelectsBlockAt95()
     {
         var (controller, session) = Create(cursorSlot: 92);
@@ -1486,6 +1516,24 @@ public class PunchControllerTests : IDisposable
         for (var i = 0; i < 3; i++)
             controller.HandleKey(Key(ConsoleKey.F5));
         Assert.Equal("ember", session.Theme.Name);
+    }
+
+    [Fact]
+    public void F5_WhenStateFileUnreadable_CyclesThemeWithoutThrowing()
+    {
+        var (controller, session) = Create();
+        Assert.Equal("ember", session.Theme.Name);
+
+        // Lock state.json so the LoadState inside HandleCycleTheme fails with
+        // an IO error (sharing violation on Windows, flock on Unix).
+        var statePath = PunchStorage.GetStateFilePath();
+        File.WriteAllText(statePath, """{ "theme": "ember" }""");
+        using var lockStream = new FileStream(statePath, FileMode.Open, FileAccess.Read, FileShare.None);
+
+        var ex = Record.Exception(() => controller.HandleKey(Key(ConsoleKey.F5)));
+
+        Assert.Null(ex);
+        Assert.Equal("meadow", session.Theme.Name);
     }
 
     [Fact]

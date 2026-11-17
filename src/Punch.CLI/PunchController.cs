@@ -592,7 +592,21 @@ internal sealed class PunchController
         _session.LogScrollOffset = Math.Clamp(_session.LogScrollOffset, 0, maxOff);
     }
 
-    private void Save() => PunchStorage.Save(_session.WorkingDate, Schedule.Blocks, _session.Note);
+    private void Save()
+    {
+
+        try
+        {
+            PunchStorage.Save(_session.WorkingDate, Schedule.Blocks, _session.Note);
+            _session.LastError = null;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // Keep the in-memory schedule so the user can retry or quit; the
+            // failure shows in the status bar instead of crashing the TUI.
+            _session.LastError = ex.Message;
+        }
+    }
 
     private void Render(LiveDisplayContext ctx)
     {

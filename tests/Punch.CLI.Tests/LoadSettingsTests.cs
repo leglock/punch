@@ -65,6 +65,17 @@ public class LoadSettingsTests : IDisposable
     }
 
     [Fact]
+    public void LoadSettings_DefaultsWhenFileUnreadable()
+    {
+        File.WriteAllText(_settingsPath, """{ "targetHours": 6 }""");
+        // Hold an exclusive lock so the read inside LoadSettings fails with an
+        // IO error on every platform (sharing violation on Windows, flock on Unix).
+        using var lockStream = new FileStream(_settingsPath, FileMode.Open, FileAccess.Read, FileShare.None);
+
+        Assert.Equal(8m, PunchStorage.LoadSettings().TargetHours);
+    }
+
+    [Fact]
     public void LoadSettings_FallsBackWhenTargetHoursIsNotPositive()
     {
         File.WriteAllText(_settingsPath, """{ "targetHours": 0 }""");
@@ -303,6 +314,18 @@ public class LoadSettingsTests : IDisposable
     public void State_EmptyWhenFileIsGarbage()
     {
         File.WriteAllText(PunchStorage.GetStateFilePath(), "not json");
+
+        Assert.Null(PunchStorage.LoadState().Theme);
+    }
+
+    [Fact]
+    public void State_EmptyWhenFileUnreadable()
+    {
+        var statePath = PunchStorage.GetStateFilePath();
+        File.WriteAllText(statePath, """{ "theme": "glacier" }""");
+        // Hold an exclusive lock so the read inside LoadState fails with an
+        // IO error on every platform (sharing violation on Windows, flock on Unix).
+        using var lockStream = new FileStream(statePath, FileMode.Open, FileAccess.Read, FileShare.None);
 
         Assert.Null(PunchStorage.LoadState().Theme);
     }

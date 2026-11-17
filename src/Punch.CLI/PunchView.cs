@@ -14,6 +14,10 @@ internal sealed class PunchView
     // fixed grey shared by every theme rather than a theme color.
     private const string Muted = "grey";
 
+    // Persistence errors in the status bar. A fixed red shared by every theme,
+    // like Muted, rather than a theme color.
+    private const string Error = "red";
+
     private readonly Layout _layout;
 
     public PunchView(Layout layout)
@@ -535,7 +539,10 @@ internal sealed class PunchView
         var totalFormatted = Duration.HumanizeTotal(totalMinutesAll);
         var noteHint = string.IsNullOrWhiteSpace(session.Note) ? "F6=note" : "F6=note 📄";
         var keyHints = $"?=help F3=summary F4=tickets {noteHint}";
-        var statusLeftPlain = $"  {filePath}  {keyHints}";
+        var errorText = string.IsNullOrEmpty(session.LastError)
+            ? ""
+            : Truncate(session.LastError, Math.Max(10, consoleWidth / 3));
+        var statusLeftPlain = $"  {filePath}  {keyHints}{(errorText.Length > 0 ? "  " + errorText : "")}";
         string statusRightPlain;
         string statusRightMarkup;
         if (session.TargetHours > 0)
@@ -563,7 +570,8 @@ internal sealed class PunchView
             statusRightMarkup = $"[bold {theme.StatusBarText}]{Markup.Escape(statusRightPlain)}[/]";
         }
         var padding = Math.Max(0, consoleWidth - statusLeftPlain.Length - statusRightPlain.Length);
-        var statusBar = $"[{theme.StatusBarText} on {theme.StatusBarBackground}]  {Markup.Escape(filePath)}  [bold {theme.StatusBarAccent}]{keyHints}[/]{new string(' ', padding)}{statusRightMarkup}[/]";
+        var errorMarkup = errorText.Length > 0 ? $"  [bold {Error}]{Markup.Escape(errorText)}[/]" : "";
+        var statusBar = $"[{theme.StatusBarText} on {theme.StatusBarBackground}]  {Markup.Escape(filePath)}  [bold {theme.StatusBarAccent}]{keyHints}[/]{errorMarkup}{new string(' ', padding)}{statusRightMarkup}[/]";
         _layout["StatusBar"].Update(new Markup(statusBar));
     }
 

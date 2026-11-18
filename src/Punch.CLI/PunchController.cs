@@ -7,23 +7,28 @@ namespace Punch.CLI;
 // model and occupancy invariants live in DaySchedule.
 internal sealed class PunchController
 {
-    private readonly PunchSession _session;
+    private PunchSession _session;
     private readonly PunchView _view;
     private readonly Func<int> _windowHeight;
+    private readonly PunchSettings _settings;
+    private bool _savePending;
 
     // Two-step confirmations for quit (Ctrl+Q then Q) and delete (Ctrl+D then D).
     private bool _confirming;
     private bool _confirmingDelete;
 
-    public PunchController(PunchSession session, PunchView view, Func<int>? windowHeight = null)
+    public PunchController(PunchSession session, PunchView view, Func<int>? windowHeight = null,
+        PunchSettings? settings = null)
     {
         _session = session;
         _view = view;
         _windowHeight = windowHeight ?? (() => System.Console.WindowHeight);
+        _settings = settings ?? new PunchSettings();
     }
 
     internal bool IsConfirmingQuit => _confirming;
     internal bool IsConfirmingDelete => _confirmingDelete;
+    internal PunchSession Session => _session;
 
     private DaySchedule Schedule => _session.Schedule;
 
@@ -43,6 +48,8 @@ internal sealed class PunchController
     // Processes one keypress. Returns true when the app should quit.
     internal bool HandleKey(ConsoleKeyInfo key)
     {
+        _session.NavigationMessage = null;
+
         // Two-step quit: Q confirms, anything else cancels.
         if (_confirming)
         {
@@ -79,7 +86,10 @@ internal sealed class PunchController
 
         if (_session.EditingNote)
         {
-            HandleNoteKey(key);
+            if (IsDayNavigationKey(key))
+                _session.NavigationMessage = "Save or cancel note first";
+            else
+                HandleNoteKey(key);
             return false;
         }
 
@@ -140,6 +150,12 @@ internal sealed class PunchController
             {
                 _session.ShowTicketSummary = false;
             }
+            return false;
+        }
+
+        if (IsDayNavigationKey(key))
+        {
+            MoveDay(key.Key == ConsoleKey.F7 ? -1 : 1);
             return false;
         }
 
@@ -592,19 +608,60 @@ internal sealed class PunchController
         _session.LogScrollOffset = Math.Clamp(_session.LogScrollOffset, 0, maxOff);
     }
 
-    private void Save()
-    {
+    private static bool IsDayNavigationKey(ConsoleKeyInfo key) =>
+        key.Modifiers == 0 && key.Key is ConsoleKey.F7 or ConsoleKey.F8;
 
+    private void MoveDay(int offset)
+    {
+        if (_session.Editing)
+        {
+            _session.NavigationMessage = "Save or cancel edit first";
+            return;
+        }
+
+        if (_session.InputBuffer.Length > 0 || _session.TicketBuffer.Length > 0)
+        {
+            _session.NavigationMessage = "Save or clear entry first";
+            return;
+        }
+
+        var dayNumber = _session.WorkingDate.DayNumber + offset;
+        if (dayNumber < DateOnly.MinValue.DayNumber || dayNumber > DateOnly.MaxValue.DayNumber)
+        {
+            _session.NavigationMessage = "Date is out of range";
+            return;
+        }
+
+        if (_savePending && !Save())
+            return;
+
+        var date = DateOnly.FromDayNumber(dayNumber);
+        try
+        {
+            _session = PunchSession.OpenDay(date, _settings, _session.Themes, _session.ThemeIndex);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException)
+        {
+            _session.NavigationMessage = $"Cannot open {date:yyyy-MM-dd}. {ex.Message}";
+        }
+    }
+
+    private bool Save()
+    {
         try
         {
             PunchStorage.Save(_session.WorkingDate, Schedule.Blocks, _session.Note);
+            _savePending = false;
             _session.LastError = null;
+            return true;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             // Keep the in-memory schedule so the user can retry or quit; the
             // failure shows in the status bar instead of crashing the TUI.
+            _savePending = true;
             _session.LastError = ex.Message;
+            return false;
         }
     }
 

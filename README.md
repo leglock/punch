@@ -68,10 +68,14 @@ the entry. Navigating onto an existing entry selects it for editing or deletion.
 | F4 / Ctrl+P      | Pick a ticket                            |
 | F5 / Ctrl+R      | Cycle color theme                        |
 | F6 / Ctrl+N      | Toggle the day's note editor              |
+| F7 / F8          | Open the previous / next calendar day   |
 | ?                | Toggle help                              |
 | Ctrl+Q, Q        | Quit                                     |
 
 ## Data
+
+F7 and F8 switch days in the open interface. Save or cancel an edit, or
+save or clear a new entry draft, before switching.
 
 Entries are saved automatically to `~/.punch/data/yyyy-MM-dd.json` — one file
 per day — on every add, edit, and delete.

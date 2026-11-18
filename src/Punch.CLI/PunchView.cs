@@ -304,7 +304,8 @@ internal sealed class PunchView
             "[bold]F3, Ctrl+T[/]   Ticket summary\n" +
             "[bold]F4, Ctrl+P[/]   Pick ticket for entry\n" +
             "[bold]F5, Ctrl+R[/]   Cycle color theme\n" +
-            "[bold]F6, Ctrl+N[/]   Toggle day note (Enter save, Esc cancel)");
+            "[bold]F6, Ctrl+N[/]   Toggle day note (Enter save, Esc cancel)\n" +
+            "[bold]F7 / F8[/]      Previous / next day");
         var helpContent = new Rows(
             titleLine,
             new Text(" "),
@@ -539,9 +540,10 @@ internal sealed class PunchView
         var totalFormatted = Duration.HumanizeTotal(totalMinutesAll);
         var noteHint = string.IsNullOrWhiteSpace(session.Note) ? "F6=note" : "F6=note 📄";
         var keyHints = $"?=help F3=summary F4=tickets {noteHint}";
-        var errorText = string.IsNullOrEmpty(session.LastError)
+        var message = session.NavigationMessage ?? session.LastError;
+        var errorText = string.IsNullOrEmpty(message)
             ? ""
-            : Truncate(session.LastError, Math.Max(10, consoleWidth / 3));
+            : Truncate(message, Math.Max(10, consoleWidth / 3));
         var statusLeftPlain = $"  {filePath}  {keyHints}{(errorText.Length > 0 ? "  " + errorText : "")}";
         string statusRightPlain;
         string statusRightMarkup;

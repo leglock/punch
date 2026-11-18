@@ -48,12 +48,14 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
         }
 
         var filePath = PunchStorage.GetDisplayPath(workingDate);
-        TimesheetInitialization initialized;
         PunchSettings appSettings;
+        PunchSession session;
         try
         {
             appSettings = PunchStorage.LoadSettings();
-            initialized = TimesheetInitializer.Initialize(workingDate, appSettings);
+            var themes = appSettings.CreateThemes();
+            var themeIndex = ThemeCatalog.IndexOf(themes, PunchStorage.LoadState().Theme);
+            session = PunchSession.OpenDay(workingDate, appSettings, themes, themeIndex);
         }
         catch (Exception ex)
         {
@@ -61,18 +63,6 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
             _console.MarkupLine($"[bold yellow]Reason:[/] {Markup.Escape(ex.Message)}");
             return 1;
         }
-
-        var (cursorSlot, selectionLength, selectedBlock) = initialized.GetInitialSelection();
-        var themes = appSettings.CreateThemes();
-        var session = new PunchSession(initialized.Schedule, workingDate, filePath, cursorSlot,
-            appSettings.GetTargetHours(workingDate.DayOfWeek), appSettings.CreateNonBillableMatcher(),
-            themes, ThemeCatalog.IndexOf(themes, PunchStorage.LoadState().Theme))
-        {
-            Note = initialized.Note,
-            StartupWarnings = initialized.Warnings,
-            SelectionLength = selectionLength,
-            SelectedBlock = selectedBlock
-        };
 
         AnsiConsole.AlternateScreen(() =>
         {
@@ -87,7 +77,7 @@ internal sealed class PunchCommand : Command<PunchCommandSettings>
                     new Layout("Input").Size(4),
                     new Layout("StatusBar").Size(1));
             var view = new PunchView(layout);
-            var controller = new PunchController(session, view);
+            var controller = new PunchController(session, view, settings: appSettings);
 
             AnsiConsole.Live(layout).Start(controller.Run);
             }

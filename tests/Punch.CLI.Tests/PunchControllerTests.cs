@@ -62,6 +62,145 @@ public class PunchControllerTests : IDisposable
         controller.HandleKey(Key(ConsoleKey.LeftArrow));
 
     [Fact]
+    public void DayNavigation_LoadsCalendarNeighborsAndRestoresSavedWork()
+    {
+        var start = new DateOnly(2021, 12, 31);
+        var next = new DateOnly(2022, 1, 1);
+        var settings = new PunchSettings { TargetHoursByDay = new() { ["Saturday"] = 0 } };
+        var session = PunchSession.OpenDay(start, settings, settings.CreateThemes(), 0);
+        var controller = new PunchController(session, new PunchView(new Layout("Root")), () => 40, settings);
+
+        Type(controller, "Work");
+        controller.HandleKey(Key(ConsoleKey.Enter));
+        controller.HandleKey(Key(ConsoleKey.F6));
+        Type(controller, "Friday note");
+        controller.HandleKey(Key(ConsoleKey.Enter));
+        controller.HandleKey(Key(ConsoleKey.F5));
+
+        Assert.False(controller.HandleKey(Key(ConsoleKey.F8)));
+        Assert.Equal(next, controller.Session.WorkingDate);
+        Assert.Equal(PunchStorage.GetDisplayPath(next), controller.Session.FilePath);
+        Assert.Equal(0m, controller.Session.TargetHours);
+        Assert.Empty(controller.Session.Blocks);
+        Assert.Empty(controller.Session.Note);
+        Assert.Equal(session.ThemeIndex, controller.Session.ThemeIndex);
+
+        controller.HandleKey(Key(ConsoleKey.F7));
+        Assert.Equal(start, controller.Session.WorkingDate);
+        Assert.Equal("Work", Assert.Single(controller.Session.Blocks).Label);
+        Assert.Equal("Friday note", controller.Session.Note);
+        Assert.Equal(35, controller.Session.CursorSlot);
+        Assert.False(File.Exists(PunchStorage.GetFilePath(next)));
+    }
+
+    [Fact]
+    public void DayNavigation_InitializesTemplatesOnceOnMissingDate()
+    {
+        File.WriteAllText(PunchStorage.GetSettingsFilePath(),
+            """{"dayTemplates":{"friday":[{"label":"Standup","start":"08:30","end":"08:45"}]}}""");
+        var settings = PunchStorage.LoadSettings();
+        var session = PunchSession.OpenDay(Date, settings, settings.CreateThemes(), 0);
+        var controller = new PunchController(session, new PunchView(new Layout("Root")), () => 40, settings);
+
+        controller.HandleKey(Key(ConsoleKey.F8));
+        var friday = Date.AddDays(1);
+        Assert.Equal(friday, controller.Session.WorkingDate);
+        Assert.Equal("Standup", controller.Session.SelectedBlock?.Label);
+        Assert.Equal("Standup", Assert.Single(PunchStorage.Load(friday)).Label);
+
+        controller.HandleKey(Key(ConsoleKey.D, ctrl: true));
+        controller.HandleKey(Key(ConsoleKey.D));
+        controller.HandleKey(Key(ConsoleKey.F7));
+        controller.HandleKey(Key(ConsoleKey.F8));
+        Assert.Equal(friday, controller.Session.WorkingDate);
+        Assert.Empty(controller.Session.Blocks);
+    }
+
+    [Theory]
+    [InlineData("description")]
+    [InlineData("ticket")]
+    [InlineData("edit")]
+    [InlineData("note")]
+    public void DayNavigation_KeepsDraftOpen(string draft)
+    {
+        var (controller, session) = Create(blocks: [new TimeBlock(36, 1, "Original")]);
+        switch (draft)
+        {
+            case "ticket":
+                controller.HandleKey(Key(ConsoleKey.Tab));
+                break;
+            case "edit":
+                session.SelectedBlock = Assert.Single(session.Blocks);
+                controller.HandleKey(Key(ConsoleKey.E, ctrl: true));
+                break;
+            case "note":
+                controller.HandleKey(Key(ConsoleKey.F6));
+                break;
+        }
+        Type(controller, "Draft");
+
+        controller.HandleKey(Key(ConsoleKey.F8));
+
+        Assert.Same(session, controller.Session);
+        Assert.NotNull(session.NavigationMessage);
+        var buffer = draft == "note" ? session.NoteBuffer : session.ActiveBuffer;
+        Assert.EndsWith(draft == "ticket" ? "DRAFT" : "Draft", buffer.ToString());
+        Assert.False(File.Exists(PunchStorage.GetFilePath(Date)));
+    }
+
+    [Fact]
+    public void DayNavigation_RetriesFailedSaveBeforeLeaving()
+    {
+        var (controller, session) = Create();
+        var path = PunchStorage.GetFilePath(Date);
+        Directory.CreateDirectory(path);
+        Type(controller, "Unsaved work");
+        controller.HandleKey(Key(ConsoleKey.Enter));
+
+        controller.HandleKey(Key(ConsoleKey.F8));
+        Assert.Same(session, controller.Session);
+        Assert.NotNull(session.LastError);
+
+        Directory.Delete(path);
+        controller.HandleKey(Key(ConsoleKey.F8));
+        Assert.Equal(Date.AddDays(1), controller.Session.WorkingDate);
+        Assert.Equal("Unsaved work", Assert.Single(PunchStorage.Load(Date)).Label);
+    }
+
+    [Fact]
+    public void DayNavigation_KeepsCurrentDayWhenTargetIsCorrupt()
+    {
+        var (controller, session) = Create();
+        var targetPath = PunchStorage.GetFilePath(Date.AddDays(1));
+        File.WriteAllText(targetPath, "invalid JSON");
+
+        controller.HandleKey(Key(ConsoleKey.F8));
+
+        Assert.Same(session, controller.Session);
+        Assert.NotNull(session.NavigationMessage);
+        Assert.Equal("invalid JSON", File.ReadAllText(targetPath));
+        controller.HandleKey(Key(ConsoleKey.F7));
+        Assert.Equal(Date.AddDays(-1), controller.Session.WorkingDate);
+        Assert.False(File.Exists(PunchStorage.GetFilePath(Date)));
+    }
+
+    [Theory]
+    [InlineData(1, ConsoleKey.F7)]
+    [InlineData(9999, ConsoleKey.F8)]
+    public void DayNavigation_KeepsCurrentDayAtDateLimit(int year, ConsoleKey key)
+    {
+        var date = year == 1 ? DateOnly.MinValue : DateOnly.MaxValue;
+        var settings = new PunchSettings();
+        var session = PunchSession.OpenDay(date, settings, settings.CreateThemes(), 0);
+        var controller = new PunchController(session, new PunchView(new Layout("Root")));
+
+        controller.HandleKey(Key(key));
+
+        Assert.Same(session, controller.Session);
+        Assert.NotNull(session.NavigationMessage);
+    }
+
+    [Fact]
     public void DayNote_SaveReplaceClearAndKeepWhenBooking()
     {
         var (controller, session) = Create();

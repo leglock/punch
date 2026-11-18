@@ -20,6 +20,20 @@ internal sealed class PunchSession
         ThemeIndex = Math.Clamp(themeIndex, 0, Themes.Count - 1);
     }
 
+    internal static PunchSession OpenDay(DateOnly date, PunchSettings settings, IReadOnlyList<Theme> themes, int themeIndex)
+    {
+        var initialized = TimesheetInitializer.Initialize(date, settings);
+        var (cursorSlot, selectionLength, selectedBlock) = initialized.GetInitialSelection();
+        return new PunchSession(initialized.Schedule, date, PunchStorage.GetDisplayPath(date), cursorSlot,
+            settings.GetTargetHours(date.DayOfWeek), settings.CreateNonBillableMatcher(), themes, themeIndex)
+        {
+            Note = initialized.Note,
+            StartupWarnings = initialized.Warnings,
+            SelectionLength = selectionLength,
+            SelectedBlock = selectedBlock
+        };
+    }
+
     public DaySchedule Schedule { get; }
     public DateOnly WorkingDate { get; }
     public string FilePath { get; }
@@ -71,10 +85,9 @@ internal sealed class PunchSession
     // Startup diagnostics are visible log rows, never saved as user data.
     public IReadOnlyList<string> StartupWarnings { get; init; } = [];
 
-    // The last persistence failure (disk full, permissions, ...), rendered in
-    // the status bar. Null while saves succeed; the in-memory schedule stays
-    // intact so the user can retry or quit gracefully.
+    // Save failures remain visible until a successful retry.
     public string? LastError { get; set; }
+    public string? NavigationMessage { get; set; }
     public int LogRowCount => StartupWarnings.Count + Math.Max(1, Schedule.Count);
 
     // Ticket picker overlay. Tickets is rebuilt each time the picker is opened
